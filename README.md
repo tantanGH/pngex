@@ -1,4 +1,5 @@
-# pngex
+# PNGEX.X
+
 PNG image loader for X680x0 with XEiJ graphic extension (Preview)
 
 X680x0用のPNG画像ローダです。[XEiJ](https://stdkmd.net/xeij/)の[拡張グラフィック画面](https://stdkmd.net/xeij/feature.htm#extendedgraphic)に対応しており、最大1024x1024x32768色の表示が可能です。それ以上のサイズはクリップされます。
@@ -20,8 +21,7 @@ X680x0用のPNG画像ローダです。[XEiJ](https://stdkmd.net/xeij/)の[拡�
 - [xdev68k](https://github.com/yosshin4004/xdev68k)
 - [Visual Studio Code](https://code.visualstudio.com/)
 
-なお、ここにPNGEX.Xをコンパイルするためには別途 libz.a および zlib のインクルードファイルが必要です。
-Makefileはxdev68k付属のサンプルをほぼそのまま使わせて頂いています。
+なお、PNGEX.Xのコンパイルには別途 zlib をビルドして include/lib ファイルが必要です。
 
 参考文献など
 
@@ -30,3 +30,24 @@ Makefileはxdev68k付属のサンプルをほぼそのまま使わせて頂い�
 
 この場を借りてお礼申し上げます。
 
+---
+### 使い方
+
+引数をつけずに実行するか、`-h` オプションをつけて実行するとヘルプメッセージが表示されます。
+
+    PNGEX - PNG image loader with XEiJ graphic extension support version 0.1.0 by tantan 2022
+    usage: pngex.x [options] <image1.png> [<image2.png> ...]
+    options:
+       -c ... clear graphic screen
+       -e ... use extended graphic mode for XEiJ (1024x1024x65536)
+       -h ... show this help message
+       -i ... show file information
+       -n ... image centering
+       -k ... wait key input
+       -v<n> ... brightness (0-100)
+       -z ... show only one image randomly
+       -b<n> ... buffer memory size factor[1-16] (default:8)
+
+XEiJの拡張グラフィックモードを使って768x512画面全体に32768色の画像を表示するには必ず `-e` オプションを指定してください。
+
+ファイル名にはワイルドカードも使用できます。
