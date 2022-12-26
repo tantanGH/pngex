@@ -7,7 +7,7 @@
 #include <iocslib.h>
 #include "zlib.h"
 
-#define VERSION "0.1.0"
+#define VERSION "0.1.1"
 // #define CHECK_CRC
 // #define DEBUG_FWRITE
 // #define DEBUG
@@ -180,7 +180,7 @@ inline static short paeth_predictor(short a, short b, short c) {
 }
 
 // output pixel data
-static int output_pixel(unsigned char* buffer, int buffer_size, PNG_HEADER* png_headerp) {
+static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_consumed, PNG_HEADER* png_headerp) {
 
   int consumed_size = 0;
   int ssp;
@@ -189,7 +189,11 @@ static int output_pixel(unsigned char* buffer, int buffer_size, PNG_HEADER* png_
   unsigned short* gvram_current;
   
   // cropping check
-  if ((g_start_y + g_current_y) >= g_actual_height) return buffer_size;
+  if ((g_start_y + g_current_y) >= g_actual_height) {
+    // no need to output any pixels
+    *buffer_consumed = buffer_size;     // just consumed all
+    return;
+  }
 
   // GVRAM entry point
   gvram_current = (unsigned short*)GVRAM +  
@@ -330,17 +334,16 @@ static int output_pixel(unsigned char* buffer, int buffer_size, PNG_HEADER* png_
 
   SUPER(ssp);
 
-  return (buffer_size - (int)(buffer_end - buffer));
+  *buffer_consumed = (buffer_size - (int)(buffer_end - buffer));
 }
 
 // inflate compressed data stream
 static int inflate_data(char* input_buffer_ptr, int input_buffer_len, int* input_buffer_consumed, 
-                        char* output_buffer_ptr, int output_buffer_len, int* output_buffer_consumed,
+                        char* output_buffer_ptr, int output_buffer_len,
                         z_stream* zisp, PNG_HEADER* png_headerp) {
 
   int z_status = Z_OK;
   int in_consumed_size = 0;
-  int out_consumed_size = 0;
   
   zisp->next_in = input_buffer_ptr;
   zisp->avail_in = input_buffer_len;
@@ -354,32 +357,18 @@ static int inflate_data(char* input_buffer_ptr, int input_buffer_len, int* input
     int avail_in_cur = zisp->avail_in;
 
     // inflate
-#ifdef DEBUG
-    printf("start inflation with in_consumed_size(so far)=%d\n",in_consumed_size);
-#endif    
     z_status = inflate(zisp,Z_NO_FLUSH);
 
     if (z_status == Z_OK) {
 
       int in_consumed_size_this = avail_in_cur - zisp->avail_in;
       int out_inflated_size = output_buffer_len - zisp->avail_out;
-      int out_remain_size;
+      int out_consumed_size, out_remain_size;
 
       in_consumed_size += in_consumed_size_this;
 
-#ifdef DEBUG
-      printf("in_consumed_size_this=%d,in_consumed_size=%d,out_inflated_size=%d\n",in_consumed_size_this,in_consumed_size,out_inflated_size);
-      printf("zis.avail_in=%d,zis.avail_out=%d\n",zisp->avail_in,zisp->avail_out);
-#endif
-
       // output pixel
-#ifdef DEBUG
-      printf("output pixel now. inflated size=%d\n",out_inflated_size);
-#endif
-      out_consumed_size = output_pixel(output_buffer_ptr,out_inflated_size,png_headerp);
-#ifdef DEBUG
-      printf("output pixel done. inflated size=%d,consumed size=%d\n",out_inflated_size,out_consumed_size);
-#endif
+      output_pixel(output_buffer_ptr,out_inflated_size,&out_consumed_size,png_headerp);
 //#ifdef DEBUG_FWRITE
 //      fwrite(output_buffer_ptr,1,out_consumed_size,fp_image_data);
 //#endif
@@ -387,9 +376,6 @@ static int inflate_data(char* input_buffer_ptr, int input_buffer_len, int* input
       // in case we cannot consume all the inflated data, reuse it for the next output
       out_remain_size = out_inflated_size - out_consumed_size;
       if (out_remain_size > 0) {
-#ifdef DEBUG
-        printf("out remain size is not zero (%d) x=%d,y=%d.\n",out_remain_size,g_current_x,g_current_y);
-#endif
         memcpy(output_buffer_ptr, output_buffer_ptr + out_consumed_size, out_remain_size);
       }
 
@@ -402,24 +388,12 @@ static int inflate_data(char* input_buffer_ptr, int input_buffer_len, int* input
 
       int in_consumed_size_this = avail_in_cur - zisp->avail_in;
       int out_inflated_size = output_buffer_len - zisp->avail_out;
-      int out_remain_size;
+      int out_remain_size, out_consumed_size;
 
       in_consumed_size += in_consumed_size_this;
 
-#ifdef DEBUG
-      printf("detected z stream end.\n");
-#endif
-
-#ifdef DEBUG
-      printf("in_consumed_size_this=%d,in_consumed_size=%d,out_inflated_size=%d\n",in_consumed_size_this,in_consumed_size,out_inflated_size);
-      printf("zis.avail_in=%d,zis.avail_out=%d\n",zisp->avail_in,zisp->avail_out);
-#endif
-
       // output pixel
-      out_consumed_size = output_pixel(output_buffer_ptr,out_inflated_size,png_headerp);
-#ifdef DEBUG
-      printf("output pixel done. inflated size=%d,consumed size=%d\n",out_inflated_size,out_consumed_size);
-#endif
+      output_pixel(output_buffer_ptr,out_inflated_size,&out_consumed_size,png_headerp);
 //#ifdef DEBUG_FWRITE
 //      fwrite(output_buffer_ptr,1,out_consumed_size,fp_image_data);
 //#endif
@@ -439,7 +413,6 @@ static int inflate_data(char* input_buffer_ptr, int input_buffer_len, int* input
   }
 
   *input_buffer_consumed = in_consumed_size;
-  *output_buffer_consumed = out_consumed_size;
 
   return z_status;
 }
@@ -610,12 +583,11 @@ static int decode_png_image(char* filename) {
 #endif
       if (chunk_size > (g_input_buffer_size - input_buffer_offset)) {
         int input_buffer_consumed = 0;
-        int output_buffer_consumed = 0;
         int z_status;
 #ifdef DEBUG
         printf("no more space in input buffer, need to consume. (ofs=%d,chunksize=%d)\n",input_buffer_offset,chunk_size);
 #endif
-        z_status = inflate_data(input_buffer_ptr,input_buffer_offset,&input_buffer_consumed,output_buffer_ptr,g_output_buffer_size,&output_buffer_consumed,&zis,&png_header);
+        z_status = inflate_data(input_buffer_ptr,input_buffer_offset,&input_buffer_consumed,output_buffer_ptr,g_output_buffer_size,&zis,&png_header);
         if (z_status != Z_OK && z_status != Z_STREAM_END) {
           printf("error: zlib data decompression error(%d).\n",z_status);
         }
@@ -666,8 +638,7 @@ static int decode_png_image(char* filename) {
   // do we have any unconsumed data?
   if (input_buffer_offset > 0) {
     int input_buffer_consumed = 0;
-    int output_buffer_consumed = 0;
-    int z_status = inflate_data(input_buffer_ptr,input_buffer_offset,&input_buffer_consumed,output_buffer_ptr,g_output_buffer_size,&output_buffer_consumed,&zis,&png_header);
+    int z_status = inflate_data(input_buffer_ptr,input_buffer_offset,&input_buffer_consumed,output_buffer_ptr,g_output_buffer_size,&zis,&png_header);
     if (z_status != Z_OK && z_status != Z_STREAM_END) {
       printf("error: zlib data decompression error(%d).\n",z_status);
     }
@@ -832,9 +803,6 @@ int main(int argc, char* argv[]) {
       if (g_random_mode == 0 || file_index == random_index) {
         if (jstrchr(file_name,'*') == NULL && jstrchr(file_name,'?') == NULL) {
           // single file
-#ifdef DEBUG
-          printf("processing single file. %s %d\n",file_name,file_index);
-#endif
           decode_png_image(file_name);
         } else {
           // expand wild card
@@ -842,9 +810,6 @@ int main(int argc, char* argv[]) {
           char path_name[256];
           char* c;
           int rc, wild_file_index = 0, wild_random_index = 0;
-#ifdef DEBUG
-          printf("processing wild card. %s\n",file_name);
-#endif
           strcpy(path_name,file_name);
           if ((c = jstrrchr(path_name,'\\')) != NULL ||
               (c = jstrrchr(path_name,'/')) != NULL ||
@@ -867,9 +832,6 @@ int main(int argc, char* argv[]) {
             srand((unsigned int)time(NULL));
             wild_random_index = rand() % wild_file_count;
             rc = FILES(&inf,file_name,0x20);
-#ifdef DEBUG
-            printf("wild_file_count=%d,wild_random_index=%d\n",wild_file_count,wild_random_index);
-#endif
           }
           while (rc == 0) {
             if (g_random_mode == 0 || wild_file_index == wild_random_index) {
