@@ -20,8 +20,7 @@ X680x0用のPNG画像ローダです。[XEiJ](https://stdkmd.net/xeij/)の[拡�
 - [xdev68k](https://github.com/yosshin4004/xdev68k)
 - [Visual Studio Code](https://code.visualstudio.com/)
 
-なお、ここにPNGEX.Xをコンパイルするためには別途 libz.a および zlib のインクルードファイルが必要です。
-Makefileはxdev68k付属のサンプルをほぼそのまま使わせて頂いています。
+なお、PNGEX.Xのコンパイルには別途 zlib をビルドして include/lib ファイルが必要です。
 
 参考文献など
 
