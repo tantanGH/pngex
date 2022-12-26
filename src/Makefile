@@ -61,7 +61,7 @@ PACKAGE_FILE = ../PNGEX010.ZIP
 DOCUMENT_FILE = PNGEX.DOC
 
 # デフォルトのターゲット
-all : $(TARGET_FILE)
+all : ${INTERMEDIATE_DIR}/$(TARGET_FILE)
 
 # 中間生成物の削除
 clean : 
@@ -72,7 +72,7 @@ clean :
 #	HLK に長いパス文字を与えることは難しい。
 #	回避策としてリンク対象ファイルを $(INTERMEDIATE_DIR) 以下にコピーし、
 #	短い相対パスを用いてリンクを実行させる。
-$(TARGET_FILE) : $(OBJS)
+${INTERMEDIATE_DIR}/$(TARGET_FILE) : $(OBJS)
 	mkdir -p $(INTERMEDIATE_DIR)
 	rm -f $(HLK_LINK_LIST)
 	@for FILENAME in $(OBJS); do\
@@ -82,7 +82,7 @@ $(TARGET_FILE) : $(OBJS)
 		cp $$FILENAME $(INTERMEDIATE_DIR)/`basename $$FILENAME`; \
 		echo $(INTERMEDIATE_DIR)/`basename $$FILENAME` >> $(HLK_LINK_LIST); \
         done
-	$(HLK) -i $(HLK_LINK_LIST) -o $(TARGET_FILE)
+	$(HLK) -i $(HLK_LINK_LIST) -o ${INTERMEDIATE_DIR}/$(TARGET_FILE)
 
 # *.c ソースのコンパイル
 $(INTERMEDIATE_DIR)/%.o : %.c Makefile
@@ -98,4 +98,4 @@ $(INTERMEDIATE_DIR)/%.o : %.s Makefile
 	$(HAS) -e -u -w0 $(INCLUDE_FLAGS) $*.s -o $(INTERMEDIATE_DIR)/$*.o
 
 package:
-	zip ${PACKAGE_FILE} ${TARGET_FILE} ${DOCUMENT_FILE} 
+	zip -j ${PACKAGE_FILE} ${INTERMEDIATE_DIR}/${TARGET_FILE} ${DOCUMENT_FILE} 
