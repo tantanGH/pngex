@@ -462,11 +462,6 @@ static int decode_png_image(char* filename) {
   int input_buffer_offset = 0;
   int output_buffer_offset = 0;
 
-  // initialize status
-  g_current_x = -1;
-  g_current_y = 0;
-  g_current_filter = 0;
-
   // for zlib inflate operation  
   z_stream zis;                     // inflation stream
   zis.zalloc = Z_NULL;
@@ -600,6 +595,11 @@ static int decode_png_image(char* filename) {
         g_start_x = 0;
         g_start_y = 0;
       }
+
+      // initialize pixel positions
+      g_current_x = -1;
+      g_current_y = 0;
+      g_current_filter = 0;
 
     } else if (strcmp("IDAT",chunk_type) == 0) {
 
