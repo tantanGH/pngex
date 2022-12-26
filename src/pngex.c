@@ -719,6 +719,23 @@ static int decode_png_image(char* filename) {
   return 0;
 }
 
+// show help messages
+static void show_help_message() {
+  printf("PNGEX - PNG image loader with XEiJ graphic extension support version " VERSION " by tantan 2022\n");
+  printf("usage: pngex.x [options] <image1.png> [<image2.png> ...]\n");
+  printf("options:\n");
+  printf("   -c ... clear graphic screen\n");
+  printf("   -e ... use extended graphic mode for XEiJ (1024x1024x65536)\n");
+  printf("   -h ... show this help message\n");
+  printf("   -i ... show file information\n");
+  printf("   -n ... image centering\n");
+  printf("   -k ... wait key input\n");
+//  printf("   -r ... reversed schroll\n");
+  printf("   -v<n> ... brightness (0-100)\n");
+  printf("   -z ... show only one image randomly\n");
+  printf("   -b<n> ... buffer memory size factor[1-16] (default:8)\n");
+}
+
 // main
 int main(int argc, char* argv[]) {
 
@@ -726,19 +743,7 @@ int main(int argc, char* argv[]) {
   int func_key_display_mode = 0;
  
   if (argc <= 1) {
-    printf("PNGEX - PNG image loader with XEiJ graphic extension support version " VERSION " by tantan 2022\n");
-    printf("usage: pngex.x [options] <image1.png> [<image2.png> ...]\n");
-    printf("options:\n");
-    printf("   -c ... clear graphic screen\n");
-    printf("   -e ... use extended graphic mode for XEiJ (1024x1024x65536)\n");
-    printf("   -h ... show this help message\n");
-    printf("   -i ... show file information\n");
-    printf("   -n ... image centering\n");
-    printf("   -k ... wait key input\n");
-    printf("   -r ... reversed schroll\n");
-    printf("   -v<n> ... brightness (0-100)\n");
-    printf("   -z ... show only one image randomly\n");
-    printf("   -b<n> ... buffer memory size factor[1-16] (default:8)");
+    show_help_message();
     return 1;
   }
 
@@ -766,6 +771,9 @@ int main(int argc, char* argv[]) {
           printf("error: too large memory factor.\n");
           return 1;
         }
+      } else if (argv[i][1] == 'h') {
+        show_help_message();
+        return 0;
       } else {
         printf("error: unknown option (%s).\n",argv[i]);
         return 1;
