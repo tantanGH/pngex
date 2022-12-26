@@ -1,6 +1,6 @@
 # PNGEX.X
 
-PNG image loader for X680x0 with XEiJ graphic extension (Preview)
+PNG image loader for X680x0 with XEiJ graphic extension support
 
 X680x0用のPNG画像ローダです。[XEiJ](https://stdkmd.net/xeij/)の[拡張グラフィック画面](https://stdkmd.net/xeij/feature.htm#extendedgraphic)に対応しており、最大1024x1024x32768色の表示が可能です。それ以上のサイズはクリップされます。
 
