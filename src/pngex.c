@@ -1,29 +1,44 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <jstring.h>
+#include <time.h>
 #include <doslib.h>
 #include <iocslib.h>
 #include "zlib.h"
 
 #define VERSION "0.1.0"
-/*#define CHECK_CRC*/
-#define DEBUG
-/*#define DEBUG_FWRITE*/
+// #define CHECK_CRC
+// #define DEBUG_FWRITE
+// #define DEBUG
 
-// global variables
-int g_clear_screen = 0;
-int g_extended_graphic_mode = 0;
-int g_brightness = 100;
-int g_buffer_memory_size_factor = 4;
-int g_start_x = 0;
-int g_start_y = 0;
-int g_current_x = -1;
-int g_current_y = 0;
-int g_current_filter = 0;
+// global variables (flags)
+int g_clear_screen = 0;                 // 1:clear screen by picture
+int g_extended_graphic_mode = 0;        // 1:XEiJ extended graphic mode 7
+int g_information_mode = 0;             // 1:show PNG file information
+int g_centering_mode = 0;               // 1:centering yes
+int g_wait_mode = 0;                    // 1:wait key input
+int g_reversed_scroll = 0;              // 1:cursor down = up scroll
+int g_random_mode = 0;                  // 1:display one image randomly
+int g_brightness = 100;                 // 0-100% brightness
 
-#ifdef DEBUG_FWRITE
-FILE* fp_image_data;
-#endif
+// global variables (buffers)
+int g_buffer_memory_size_factor = 8;    // in=64KB*factor, out=128KB*factor
+int g_input_buffer_size = 65536 * 8;    // default input buffer size bytes
+int g_output_buffer_size = 131072 * 8;  // default output buffer size bytes
+
+// global variables (states)
+int g_actual_width = 0;                 // crop width
+int g_actual_height = 0;                // crop height
+int g_start_x = 0;                      // display offset X
+int g_start_y = 0;                      // display offset Y
+int g_current_x = -1;                   // current drawing pixel X
+int g_current_y = 0;                    // current drawing pixel Y
+int g_current_filter = 0;               // current PNG filter mode
+
+//#ifdef DEBUG_FWRITE
+//FILE* fp_image_data;
+//#endif
 
 // cached data for filtering
 unsigned char g_left_rf = 0;
@@ -55,17 +70,29 @@ typedef struct {
 
 // graphic ops memory addresses
 #define GVRAM     0xC00000
+#define CRTC_R00  0xE80000
 #define CRTC_R20  0xE80028
 #define VDC_R1    0xE82400
 #define VDC_R3    0xE82600
 #define PALETTE   0xE82000
 
+// display screen size
+#define SCREEN_WIDTH  768
+#define SCREEN_HEIGHT 512
+
+// actual screen size
+#define ACTUAL_WIDTH_EX  1024
+#define ACTUAL_HEIGHT_EX 1024
+#define ACTUAL_WIDTH      512
+#define ACTUAL_HEIGHT     512
+
+// initialize color mapping table
 static void initialize_color_mapping() {
   for (int i = 0; i < 256; i++) {
     unsigned int c = (int)(i * 32 * g_brightness / 100) >> 8;
-    g_rgb555_r[i] = (unsigned short)((c <<  6) + 1);
-    g_rgb555_g[i] = (unsigned short)((c << 11) + 1);
-    g_rgb555_b[i] = (unsigned short)((c <<  1) + 1);
+    g_rgb555_r[i] = (unsigned short)((c <<  6) + 0);
+    g_rgb555_g[i] = (unsigned short)((c << 11) + 0);
+    g_rgb555_b[i] = (unsigned short)((c <<  1) + 0);
   }
 }
 
@@ -73,6 +100,7 @@ static void initialize_color_mapping() {
 static void initialize_screen() {
 
   // crtc, video controller and palette
+  unsigned short* crtc_r00_ptr = (unsigned short*)CRTC_R00;
   unsigned short* crtc_r20_ptr = (unsigned short*)CRTC_R20;
   unsigned short* vdc_r1_ptr   = (unsigned short*)VDC_R1;
   unsigned short* vdc_r3_ptr   = (unsigned short*)VDC_R3;
@@ -80,9 +108,6 @@ static void initialize_screen() {
 
   // supervisor stack pointer
   int ssp;
-
-  // 1024x1024x16 color mode (tentatively)
-  CRTMOD(16);
 
   // clear screen if needed
   if (g_clear_screen != 0) {
@@ -92,15 +117,26 @@ static void initialize_screen() {
   // enter supervisor
   ssp = SUPER(0);
 
+  // change CRTC screen mode (768x512,31kHz)
+  crtc_r00_ptr[0] = 0x0089;
+  crtc_r00_ptr[1] = 0x000e;
+  crtc_r00_ptr[2] = 0x001c;
+  crtc_r00_ptr[3] = 0x007c; 
+  crtc_r00_ptr[4] = 0x0237;
+  crtc_r00_ptr[5] = 0x0005;
+  crtc_r00_ptr[6] = 0x0028;
+  crtc_r00_ptr[7] = 0x0228; 
+  crtc_r00_ptr[8] = 0x001b;
+
   // change CRTC memory mode
   if (g_extended_graphic_mode == 0) {
     *crtc_r20_ptr = 0x0316;   // memory mode 3
     *vdc_r1_ptr = 3;          // memory mode 3
-    *vdc_r3_ptr = 0x30;       // graphic on
+    *vdc_r3_ptr = 0x2f;       // graphic on (512x512)
   } else {
     *crtc_r20_ptr = 0x0716;   // memory mode 7 (for XEiJ only)
     *vdc_r1_ptr = 7;          // memory mode 7 (for XEiJ only)
-    *vdc_r3_ptr = 0x30;       // graphic on
+    *vdc_r3_ptr = 0x30;       // graphic on (1024x1024)
   }
 
   // initialize 65536 color pallet
@@ -150,8 +186,14 @@ static int output_pixel(unsigned char* buffer, int buffer_size, PNG_HEADER* png_
   int ssp;
   int bytes_per_pixel = (png_headerp->color_type == PNG_COLOR_TYPE_RGBA) ? 4 : 3;
   unsigned char* buffer_end = buffer + buffer_size;
-  unsigned short* gvram_current = (unsigned short*)GVRAM + 
-                                    1024 * (g_start_y + g_current_y) + 
+  unsigned short* gvram_current;
+  
+  // cropping check
+  if ((g_start_y + g_current_y) >= g_actual_height) return buffer_size;
+
+  // GVRAM entry point
+  gvram_current = (unsigned short*)GVRAM +  
+                                    g_actual_width * (g_start_y + g_current_y) + 
                                     g_start_x + ((g_current_x >= 0) ? g_current_x : 0);
 
   // supervisor mode
@@ -248,8 +290,10 @@ static int output_pixel(unsigned char* buffer, int buffer_size, PNG_HEADER* png_
         bf = b;
       }
 
-      // write pixel data
-      *gvram_current++ = g_rgb555_r[rf] | g_rgb555_g[gf] | g_rgb555_b[bf];
+      // write pixel data with cropping
+      if ((g_start_x + g_current_x) < g_actual_width) {
+        *gvram_current++ = g_rgb555_r[rf] | g_rgb555_g[gf] | g_rgb555_b[bf];
+      }
 #ifdef DEBUG
       //printf("pixel: x=%d,y=%d,r=%d,g=%d,b=%d,rf=%d,gf=%d,bf=%d\n",g_current_x,g_current_y,r,g,b,rf,gf,bf);
 #endif      
@@ -276,7 +320,8 @@ static int output_pixel(unsigned char* buffer, int buffer_size, PNG_HEADER* png_
       if (g_current_x >= png_headerp->width) {
         g_current_x = -1;
         g_current_y++;
-        gvram_current = (unsigned short*)GVRAM + 1024 * (g_start_y + g_current_y) + g_start_x;
+        if ((g_start_y + g_current_y) >= g_actual_height) break;  // Y cropping
+        gvram_current = (unsigned short*)GVRAM + g_actual_width * (g_start_y + g_current_y) + g_start_x;
       }
 
     }
@@ -335,9 +380,9 @@ static int inflate_data(char* input_buffer_ptr, int input_buffer_len, int* input
 #ifdef DEBUG
       printf("output pixel done. inflated size=%d,consumed size=%d\n",out_inflated_size,out_consumed_size);
 #endif
-#ifdef DEBUG_FWRITE
-      fwrite(output_buffer_ptr,1,out_consumed_size,fp_image_data);
-#endif
+//#ifdef DEBUG_FWRITE
+//      fwrite(output_buffer_ptr,1,out_consumed_size,fp_image_data);
+//#endif
 
       // in case we cannot consume all the inflated data, reuse it for the next output
       out_remain_size = out_inflated_size - out_consumed_size;
@@ -375,9 +420,9 @@ static int inflate_data(char* input_buffer_ptr, int input_buffer_len, int* input
 #ifdef DEBUG
       printf("output pixel done. inflated size=%d,consumed size=%d\n",out_inflated_size,out_consumed_size);
 #endif
-#ifdef DEBUG_FWRITE
-      fwrite(output_buffer_ptr,1,out_consumed_size,fp_image_data);
-#endif
+//#ifdef DEBUG_FWRITE
+//      fwrite(output_buffer_ptr,1,out_consumed_size,fp_image_data);
+//#endif
 
       // in case we cannot consume all the inflated data, reuse it for the next output
       out_remain_size = out_inflated_size - out_consumed_size;
@@ -400,7 +445,7 @@ static int inflate_data(char* input_buffer_ptr, int input_buffer_len, int* input
 }
 
 // decode PNG
-static int decode_png_image(const char* filename, int input_buffer_size, int output_buffer_size) {
+static int decode_png_image(char* filename) {
 
   // for file operation
   FILE* fp;
@@ -416,6 +461,11 @@ static int decode_png_image(const char* filename, int input_buffer_size, int out
   char* output_buffer_ptr = NULL;
   int input_buffer_offset = 0;
   int output_buffer_offset = 0;
+
+  // initialize status
+  g_current_x = -1;
+  g_current_y = 0;
+  g_current_filter = 0;
 
   // for zlib inflate operation  
   z_stream zis;                     // inflation stream
@@ -433,9 +483,9 @@ static int decode_png_image(const char* filename, int input_buffer_size, int out
     return -1;
   }
   
-  #ifdef DEBUG_FWRITE
-  fp_image_data = fopen("mini2.raw", "wb");
-  #endif
+//  #ifdef DEBUG_FWRITE
+//  fp_image_data = fopen("__debug_.raw", "wb");
+//  #endif
 
   // open source file
   fp = fopen(filename, "rb");
@@ -455,7 +505,7 @@ static int decode_png_image(const char* filename, int input_buffer_size, int out
   }
 
   // allocate input buffer memory
-  input_buffer_ptr = malloc__(input_buffer_size);
+  input_buffer_ptr = malloc__(g_input_buffer_size);
   if (input_buffer_ptr == NULL) {
     printf("error: cannot allocate memory for input buffer.\n");
     fclose(fp);
@@ -463,7 +513,7 @@ static int decode_png_image(const char* filename, int input_buffer_size, int out
   }
   
   // allocate output buffer memory
-  output_buffer_ptr= malloc__(output_buffer_size);
+  output_buffer_ptr= malloc__(g_output_buffer_size);
     if (output_buffer_ptr == NULL) {
     printf("error: cannot allocate memory for output buffer.\n");
     fclose(fp);
@@ -504,12 +554,20 @@ static int decode_png_image(const char* filename, int input_buffer_size, int out
 
       // parse header
       memcpy((char*)&png_header,input_buffer_ptr,sizeof(PNG_HEADER));
-#ifdef DEBUG
-      printf("width=%d\n",png_header.width);
-      printf("height=%d\n",png_header.height);
-      printf("bit_depth=%d\n",png_header.bit_depth);
-      printf("color_type=%d\n",png_header.color_type);
-#endif
+      if (g_information_mode != 0) {
+        struct FILBUF inf;
+        FILES(&inf,filename,0x23);
+        printf("--\n");
+        printf(" file name: %s\n",filename);
+        printf(" file size: %d\n",inf.filelen);
+        printf(" file time: %04d-%02d-%02d %02d:%02d:%02d\n",1980+(inf.date>>9),(inf.date>>5)&0xf,inf.date&0x1f,inf.time>>11,(inf.time>>5)&0x3f,inf.time&0x1f);
+        printf("     width: %d\n",png_header.width);
+        printf("    height: %d\n",png_header.height);
+        printf(" bit depth: %d\n",png_header.bit_depth);
+        printf("color type: %d\n",png_header.color_type);
+        printf(" interlace: %d\n",png_header.interlace_method);
+        break;
+      }
 
       // check bit depth (support 8bit color only)
       if (png_header.bit_depth != 8) {
@@ -534,6 +592,15 @@ static int decode_png_image(const char* filename, int input_buffer_size, int out
       g_up_gf_ptr = malloc__(png_header.width);
       g_up_bf_ptr = malloc__(png_header.width);
 
+      // start offset calculation
+      if (g_centering_mode != 0) {
+        g_start_x = (png_header.width <= SCREEN_WIDTH) ? (SCREEN_WIDTH - png_header.width) >> 1 : 0;
+        g_start_y = (png_header.height <= SCREEN_HEIGHT) ? (SCREEN_HEIGHT - png_header.height) >> 1 : 0;
+      } else {
+        g_start_x = 0;
+        g_start_y = 0;
+      }
+
     } else if (strcmp("IDAT",chunk_type) == 0) {
 
       // IDAT - data chunk, may appear several times
@@ -541,14 +608,14 @@ static int decode_png_image(const char* filename, int input_buffer_size, int out
 #ifdef CHECK_CRC
       unsigned int checksum;
 #endif
-      if (chunk_size > (input_buffer_size - input_buffer_offset)) {
+      if (chunk_size > (g_input_buffer_size - input_buffer_offset)) {
         int input_buffer_consumed = 0;
         int output_buffer_consumed = 0;
         int z_status;
 #ifdef DEBUG
         printf("no more space in input buffer, need to consume. (ofs=%d,chunksize=%d)\n",input_buffer_offset,chunk_size);
 #endif
-        z_status = inflate_data(input_buffer_ptr,input_buffer_offset,&input_buffer_consumed,output_buffer_ptr,output_buffer_size,&output_buffer_consumed,&zis,&png_header);
+        z_status = inflate_data(input_buffer_ptr,input_buffer_offset,&input_buffer_consumed,output_buffer_ptr,g_output_buffer_size,&output_buffer_consumed,&zis,&png_header);
         if (z_status != Z_OK && z_status != Z_STREAM_END) {
           printf("error: zlib data decompression error(%d).\n",z_status);
         }
@@ -600,7 +667,7 @@ static int decode_png_image(const char* filename, int input_buffer_size, int out
   if (input_buffer_offset > 0) {
     int input_buffer_consumed = 0;
     int output_buffer_consumed = 0;
-    int z_status = inflate_data(input_buffer_ptr,input_buffer_offset,&input_buffer_consumed,output_buffer_ptr,output_buffer_size,&output_buffer_consumed,&zis,&png_header);
+    int z_status = inflate_data(input_buffer_ptr,input_buffer_offset,&input_buffer_consumed,output_buffer_ptr,g_output_buffer_size,&output_buffer_consumed,&zis,&png_header);
     if (z_status != Z_OK && z_status != Z_STREAM_END) {
       printf("error: zlib data decompression error(%d).\n",z_status);
     }
@@ -613,9 +680,9 @@ static int decode_png_image(const char* filename, int input_buffer_size, int out
   // close source PNG file
   fclose(fp);
 
-#ifdef DEBUG_FWRITE
-  fclose(fp_image_data);
-#endif
+//#ifdef DEBUG_FWRITE
+//  fclose(fp_image_data);
+//#endif
 
   // reclaim filter buffer memory
   if (g_up_rf_ptr != NULL) {
@@ -643,6 +710,11 @@ static int decode_png_image(const char* filename, int input_buffer_size, int out
     output_buffer_ptr = NULL;
   }
 
+  // key wait
+  if (g_wait_mode != 0) {
+    getchar();
+  }
+
   // done
   return 0;
 }
@@ -650,12 +722,11 @@ static int decode_png_image(const char* filename, int input_buffer_size, int out
 // main
 int main(int argc, char* argv[]) {
 
-  int input_buffer_size, output_buffer_size;
-  char* png_filename = NULL;
-
-  printf("PNGEX - PNG image loader for X680x0 with XEiJ graphic extension version " VERSION " by tantan 2022\n");
+  int input_file_count = 0;
+  int func_key_display_mode = 0;
  
   if (argc <= 1) {
+    printf("PNGEX - PNG image loader with XEiJ graphic extension support version " VERSION " by tantan 2022\n");
     printf("usage: pngex.x [options] <image1.png> [<image2.png> ...]\n");
     printf("options:\n");
     printf("   -c ... clear graphic screen\n");
@@ -667,7 +738,7 @@ int main(int argc, char* argv[]) {
     printf("   -r ... reversed schroll\n");
     printf("   -v<n> ... brightness (0-100)\n");
     printf("   -z ... show only one image randomly\n");
-    printf("   -b<n> ... buffer memory size factor[1-16] (default:4)");
+    printf("   -b<n> ... buffer memory size factor[1-16] (default:8)");
     return 1;
   }
 
@@ -677,6 +748,16 @@ int main(int argc, char* argv[]) {
         g_clear_screen = 1;
       } else if (argv[i][1] == 'e') {
         g_extended_graphic_mode = 1;
+      } else if (argv[i][1] == 'i') {
+        g_information_mode = 1;
+      } else if (argv[i][1] == 'n') {
+        g_centering_mode = 1;
+      } else if (argv[i][1] == 'k') {
+        g_wait_mode = 1;
+      } else if (argv[i][1] == 'r') {
+        g_reversed_scroll = 1;
+      } else if (argv[i][1] == 'z') {
+        g_random_mode = 1;
       } else if (argv[i][1] == 'v') {
         g_brightness = atoi(argv[i]+2);
       } else if (argv[i][1] == 'b') {
@@ -690,29 +771,123 @@ int main(int argc, char* argv[]) {
         return 1;
       }
     } else {
-      png_filename = argv[i];
+      input_file_count++;
     }
   }
 
-  if (png_filename == NULL) {
+  if (input_file_count <= 0) {
     printf("error: no input file.\n");
     return 1;
   }
 
-  // input buffer = 64KB * factor
-  input_buffer_size = 65536 * g_buffer_memory_size_factor;
+  if (g_information_mode != 1) {
 
-  // output (inflate) buffer = 128KB * factor - must be LCM(3,4)*n to store RGB or RGBA tuple
-  output_buffer_size = 131072 * g_buffer_memory_size_factor;
+    // input buffer = 64KB * factor
+    g_input_buffer_size = 65536 * g_buffer_memory_size_factor;
 
-  // initialize color mapping table
-  initialize_color_mapping();
+    // output (inflate) buffer = 128KB * factor - should be LCM(3,4)*n to store RGB or RGBA tuple
+    g_output_buffer_size = 131072 * g_buffer_memory_size_factor;
 
-  // initialize graphic screen
-  initialize_screen();
+    // cropping window
+    g_actual_width = g_extended_graphic_mode != 0 ? ACTUAL_WIDTH_EX : ACTUAL_WIDTH;
+    g_actual_height = g_extended_graphic_mode != 0 ? ACTUAL_HEIGHT_EX : ACTUAL_HEIGHT;
+
+    // initialize color mapping table
+    initialize_color_mapping();
+
+    // initialize graphic screen
+    initialize_screen();
+
+    // cursor display off
+    C_CUROFF();
+
+    // function key display off
+    func_key_display_mode = C_FNKMOD(-1);
+    C_FNKMOD(3);
+
+  }
 
   // decode png image
-  decode_png_image(png_filename,input_buffer_size,output_buffer_size);
+  {
+    int file_index = 0;
+    int random_index = 0;
+    if (g_random_mode != 0) {
+      srand((unsigned int)time(NULL));
+      random_index = rand() % input_file_count;
+#ifdef DEBUG
+      printf("random_index=%d\n",random_index);
+#endif
+    }
+    for (int i = 1; i < argc; i++) {
+      char* file_name = argv[i];
+      if (file_name[0] == '-') continue;
+      if (g_random_mode == 0 || file_index == random_index) {
+        if (jstrchr(file_name,'*') == NULL && jstrchr(file_name,'?') == NULL) {
+          // single file
+#ifdef DEBUG
+          printf("processing single file. %s %d\n",file_name,file_index);
+#endif
+          decode_png_image(file_name);
+        } else {
+          // expand wild card
+          struct FILBUF inf;
+          char path_name[256];
+          char* c;
+          int rc, wild_file_index = 0, wild_random_index = 0;
+#ifdef DEBUG
+          printf("processing wild card. %s\n",file_name);
+#endif
+          strcpy(path_name,file_name);
+          if ((c = jstrrchr(path_name,'\\')) != NULL ||
+              (c = jstrrchr(path_name,'/')) != NULL ||
+              (c = jstrrchr(path_name,':')) != NULL) {
+            *(c+1) = '\0';
+          } else {
+            path_name[0] = '\0';
+          }
+          rc = FILES(&inf,file_name,0x20);
+          if (rc != 0) {
+            printf("error: file search error. (rc=%d)\n",rc);
+            break;
+          }
+          if (g_random_mode != 0) {
+            int wild_file_count = 0;
+            while (rc == 0) {
+              wild_file_count++;
+              rc = NFILES(&inf);
+            }
+            srand((unsigned int)time(NULL));
+            wild_random_index = rand() % wild_file_count;
+            rc = FILES(&inf,file_name,0x20);
+#ifdef DEBUG
+            printf("wild_file_count=%d,wild_random_index=%d\n",wild_file_count,wild_random_index);
+#endif
+          }
+          while (rc == 0) {
+            if (g_random_mode == 0 || wild_file_index == wild_random_index) {
+              char this_name[256];
+              strcpy(this_name,path_name);
+              strcat(this_name,inf.name);
+              decode_png_image(this_name);
+            }
+            wild_file_index++;
+            rc = NFILES(&inf);
+          }
+        }
+      }
+      file_index++;
+    }
+  }
+
+  if (g_information_mode != 1) {
+
+    // cursor on
+    C_CURON();
+
+    // resume function key display mode
+    C_FNKMOD(func_key_display_mode);
+
+  }
 
   return 0;
 }

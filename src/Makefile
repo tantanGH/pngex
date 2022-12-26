@@ -17,7 +17,6 @@ GAS2HAS = perl ${XDEV68K_DIR}/util/x68k_gas2has.pl -cpu 68000 -inc doscall.inc -
 RUN68 = ${XDEV68K_DIR}/run68/run68
 HAS = $(RUN68) ${XDEV68K_DIR}/x68k_bin/HAS060.X
 HLK = $(RUN68) ${XDEV68K_DIR}/x68k_bin/hlk301.x
-AR = $(RUN68) ${XDEV68K_DIR}/x68k_bin/ar.x
 
 # 実行ファイル名
 TARGET_FILE = PNGEX.X
@@ -26,9 +25,9 @@ TARGET_FILE = PNGEX.X
 INCLUDE_FLAGS = -I${XDEV68K_DIR}/include/xc -I${XDEV68K_DIR}/include/xdev68k -I${XDEV68K_DIR}/include/zlib
 
 # コンパイルフラグ
-COMMON_FLAGS = -m68000 -Os $(INCLUDE_FLAGS) -D__time_t_defined -D__clock_t_defined
+COMMON_FLAGS = -m68000 -Os $(INCLUDE_FLAGS)
 #CFLAGS = $(COMMON_FLAGS) -Wno-builtin-declaration-mismatch -fcall-used-d2 -fcall-used-a2 -finput-charset=cp932 -fexec-charset=cp932 -fverbose-asm
-CFLAGS = $(COMMON_FLAGS) -Wno-builtin-declaration-mismatch -fcall-used-d2 -fcall-used-a2 -fverbose-asm -z-stack=65536
+CFLAGS = $(COMMON_FLAGS) -Wno-builtin-declaration-mismatch -fcall-used-d2 -fcall-used-a2 -fverbose-asm -z-stack=32768 -D__time_t_defined -D__clock_t_defined
 
 # *.c ソースファイル
 C_SRCS = pngex.c
@@ -38,7 +37,6 @@ ASM_SRCS =
 
 # リンク対象のライブラリファイル
 LIBS =\
-	${XDEV68K_DIR}/lib/xc/BASLIB.L \
 	${XDEV68K_DIR}/lib/xc/CLIB.L \
 	${XDEV68K_DIR}/lib/xc/DOSLIB.L \
 	${XDEV68K_DIR}/lib/xc/IOCSLIB.L \
@@ -55,6 +53,12 @@ OBJS =	$(addprefix $(INTERMEDIATE_DIR)/,$(patsubst %.c,%.o,$(C_SRCS))) \
 
 # HLK に入力するリンクリスト
 HLK_LINK_LIST = $(INTERMEDIATE_DIR)/_lk_list.tmp
+
+# Distribution package 
+PACKAGE_FILE = ../PNGEX010.ZIP
+
+# Document file
+DOCUMENT_FILE = PNGEX.DOC
 
 # デフォルトのターゲット
 all : $(TARGET_FILE)
@@ -92,3 +96,6 @@ $(INTERMEDIATE_DIR)/%.o : %.c Makefile
 $(INTERMEDIATE_DIR)/%.o : %.s Makefile
 	mkdir -p $(INTERMEDIATE_DIR)
 	$(HAS) -e -u -w0 $(INCLUDE_FLAGS) $*.s -o $(INTERMEDIATE_DIR)/$*.o
+
+package:
+	zip ${PACKAGE_FILE} ${TARGET_FILE} ${DOCUMENT_FILE} 
