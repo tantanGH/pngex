@@ -7,7 +7,7 @@
 #include <iocslib.h>
 #include "zlib.h"
 
-#define VERSION "0.1.1"
+#define VERSION "0.2.0"
 // #define CHECK_CRC
 // #define DEBUG_FWRITE
 // #define DEBUG
@@ -71,10 +71,12 @@ typedef struct {
 // graphic ops memory addresses
 #define GVRAM     0xC00000
 #define CRTC_R00  0xE80000
+#define CRTC_R12  0xE80018
 #define CRTC_R20  0xE80028
 #define VDC_R1    0xE82400
 #define VDC_R3    0xE82600
 #define PALETTE   0xE82000
+#define GPIP      0xE88001
 
 // display screen size
 #define SCREEN_WIDTH  768
@@ -90,9 +92,9 @@ typedef struct {
 static void initialize_color_mapping() {
   for (int i = 0; i < 256; i++) {
     unsigned int c = (int)(i * 32 * g_brightness / 100) >> 8;
-    g_rgb555_r[i] = (unsigned short)((c <<  6) + 0);
-    g_rgb555_g[i] = (unsigned short)((c << 11) + 0);
-    g_rgb555_b[i] = (unsigned short)((c <<  1) + 0);
+    g_rgb555_r[i] = (unsigned short)((c <<  6) + 1);
+    g_rgb555_g[i] = (unsigned short)((c << 11) + 1);
+    g_rgb555_b[i] = (unsigned short)((c <<  1) + 1);
   }
 }
 
@@ -101,10 +103,12 @@ static void initialize_screen() {
 
   // crtc, video controller and palette
   unsigned short* crtc_r00_ptr = (unsigned short*)CRTC_R00;
+  unsigned short* crtc_r12_ptr = (unsigned short*)CRTC_R12;
   unsigned short* crtc_r20_ptr = (unsigned short*)CRTC_R20;
   unsigned short* vdc_r1_ptr   = (unsigned short*)VDC_R1;
   unsigned short* vdc_r3_ptr   = (unsigned short*)VDC_R3;
   unsigned short* palette_ptr  = (unsigned short*)PALETTE;
+  volatile unsigned char* gpip = (unsigned char*)GPIP;
 
   // supervisor stack pointer
   int ssp;
@@ -116,6 +120,10 @@ static void initialize_screen() {
 
   // enter supervisor
   ssp = SUPER(0);
+
+  // wait vdisp
+  while(!(*gpip & 0x10));
+  while( (*gpip & 0x10));
 
   // change CRTC screen mode (768x512,31kHz)
   crtc_r00_ptr[0] = 0x0089;
@@ -133,10 +141,20 @@ static void initialize_screen() {
     *crtc_r20_ptr = 0x0316;   // memory mode 3
     *vdc_r1_ptr = 3;          // memory mode 3
     *vdc_r3_ptr = 0x2f;       // graphic on (512x512)
+    crtc_r12_ptr[0] = 0;          // scroll position X
+    crtc_r12_ptr[1] = 0;          // scroll position Y
+    crtc_r12_ptr[2] = 0;          // scroll position X
+    crtc_r12_ptr[3] = 0;          // scroll position Y    
+    crtc_r12_ptr[4] = 0;          // scroll position X
+    crtc_r12_ptr[5] = 0;          // scroll position Y
+    crtc_r12_ptr[6] = 0;          // scroll position X
+    crtc_r12_ptr[7] = 0;          // scroll position Y
   } else {
     *crtc_r20_ptr = 0x0716;   // memory mode 7 (for XEiJ only)
     *vdc_r1_ptr = 7;          // memory mode 7 (for XEiJ only)
     *vdc_r3_ptr = 0x30;       // graphic on (1024x1024)
+    crtc_r12_ptr[0] = 0;          // scroll position X
+    crtc_r12_ptr[1] = 0;          // scroll position Y
   }
 
   // initialize 65536 color pallet
