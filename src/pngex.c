@@ -7,7 +7,7 @@
 #include <iocslib.h>
 #include "zlib.h"
 
-#define VERSION "0.2.0"
+#define VERSION "0.3.0"
 // #define CHECK_CRC
 // #define DEBUG_FWRITE
 // #define DEBUG
