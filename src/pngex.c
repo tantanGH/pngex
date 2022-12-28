@@ -7,7 +7,7 @@
 #include <iocslib.h>
 #include "zlib.h"
 
-#define VERSION "0.3.0"
+#define VERSION "0.3.1"
 // #define CHECK_CRC
 // #define DEBUG_FWRITE
 // #define DEBUG
@@ -102,12 +102,12 @@ static void initialize_color_mapping() {
 static void initialize_screen() {
 
   // crtc, video controller and palette
-  unsigned short* crtc_r00_ptr = (unsigned short*)CRTC_R00;
-  unsigned short* crtc_r12_ptr = (unsigned short*)CRTC_R12;
-  unsigned short* crtc_r20_ptr = (unsigned short*)CRTC_R20;
-  unsigned short* vdc_r1_ptr   = (unsigned short*)VDC_R1;
-  unsigned short* vdc_r3_ptr   = (unsigned short*)VDC_R3;
-  unsigned short* palette_ptr  = (unsigned short*)PALETTE;
+  volatile unsigned short* crtc_r00_ptr = (unsigned short*)CRTC_R00;
+  volatile unsigned short* crtc_r12_ptr = (unsigned short*)CRTC_R12;
+  volatile unsigned short* crtc_r20_ptr = (unsigned short*)CRTC_R20;
+  volatile unsigned short* vdc_r1_ptr   = (unsigned short*)VDC_R1;
+  volatile unsigned short* vdc_r3_ptr   = (unsigned short*)VDC_R3;
+  volatile unsigned short* palette_ptr  = (unsigned short*)PALETTE;
   volatile unsigned char* gpip = (unsigned char*)GPIP;
 
   // supervisor stack pointer
@@ -204,7 +204,7 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
   int ssp;
   int bytes_per_pixel = (png_headerp->color_type == PNG_COLOR_TYPE_RGBA) ? 4 : 3;
   unsigned char* buffer_end = buffer + buffer_size;
-  unsigned short* gvram_current;
+  volatile unsigned short* gvram_current;
   
   // cropping check
   if ((g_start_y + g_current_y) >= g_actual_height) {
