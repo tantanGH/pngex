@@ -44,9 +44,10 @@ X680x0用のPNG画像ローダです。[XEiJ](https://stdkmd.net/xeij/)の[拡�
        -i ... show file information
        -n ... image centering
        -k ... wait key input
+       -u ... use high memory for buffers (set -b32 automatically)
        -v<n> ... brightness (0-100)
        -z ... show only one image randomly
-       -b<n> ... buffer memory size factor[1-16] (default:8)
+       -b<n> ... buffer memory size factor[1-32] (default:8)
 
 XEiJの拡張グラフィックモードを使って768x512画面全体に32768色の画像を表示するには必ず `-e` オプションを指定してください。
 
@@ -55,6 +56,7 @@ XEiJの拡張グラフィックモードを使って768x512画面全体に32768�
 ---
 ### 変更履歴
 
+- version 0.4.0 (2022.12.29) ... ハイメモリに対応(-uオプション)
 - version 0.3.1 (2022.12.28) ... コンパイラを gcc 12.2.0 に変更。-finput-charset=cp932 -fexec-charset=cp932 を有効化。
 - version 0.2.0 (2022.12.27) ... CRTCレジスタ変更前にVSYNC待ちするようにした。スクロール位置をデフォルトにするようにした。
 - version 0.1.0 (2022.12.25) ... 初版
