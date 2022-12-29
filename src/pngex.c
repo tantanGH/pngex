@@ -7,7 +7,7 @@
 #include <iocslib.h>
 #include "zlib.h"
 
-#define VERSION "0.3.1"
+#define VERSION "0.3.2"
 // #define CHECK_CRC
 // #define DEBUG_FWRITE
 // #define DEBUG
@@ -539,7 +539,14 @@ static int decode_png_image(char* filename) {
 #endif
 
       // parse header
-      memcpy((char*)&png_header,input_buffer_ptr,sizeof(PNG_HEADER));
+      png_header.width              = *((int*)(input_buffer_ptr));
+      png_header.height             = *((int*)(input_buffer_ptr + 4));
+      png_header.bit_depth          = input_buffer_ptr[8];
+      png_header.color_type         = input_buffer_ptr[9];
+      png_header.compression_method = input_buffer_ptr[10];
+      png_header.filter_method      = input_buffer_ptr[11];
+      png_header.interlace_method   = input_buffer_ptr[12];
+      //memcpy((char*)&png_header,input_buffer_ptr,sizeof(PNG_HEADER));   // this might not work properly because of gcc's alignment optimization
       if (g_information_mode != 0) {
         struct FILBUF inf;
         FILES(&inf,filename,0x23);
