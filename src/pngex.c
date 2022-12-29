@@ -7,7 +7,7 @@
 #include <iocslib.h>
 #include "zlib.h"
 
-#define VERSION "0.3.2"
+#define VERSION "0.4.0"
 // #define CHECK_CRC
 // #define DEBUG_FWRITE
 // #define DEBUG
@@ -21,6 +21,7 @@ int g_wait_mode = 0;                    // 1:wait key input
 int g_reversed_scroll = 0;              // 1:cursor down = up scroll
 int g_random_mode = 0;                  // 1:display one image randomly
 int g_brightness = 100;                 // 0-100% brightness
+int g_high_memory_mode = 0;             // 1:high memory for buffers
 
 // global variables (buffers)
 int g_buffer_memory_size_factor = 8;    // in=64KB*factor, out=128KB*factor
@@ -167,17 +168,54 @@ static void initialize_screen() {
   SUPER(ssp);
 }
 
-// direct memory allocation using DOSCALL (with malloc, we cannot allocate more than 64k, why?)
-inline static char* malloc__(int size) {
+//  high memory operations
+inline static void* malloc_himem(int size) {
+
+    struct REGS in_regs = { 0 };
+    struct REGS out_regs = { 0 };
+
+    in_regs.d0 = 0xF8;      // IOCS _HIMEM
+    in_regs.d1 = 1;         // HIMEM_MALLOC
+    in_regs.d2 = size;
+
+    TRAP15(&in_regs, &out_regs);
+
+    int rc = out_regs.d0;
+
+#ifdef DEBUG
+    printf("allocated high memory = %X\n",out_regs.a1);
+#endif
+    return (rc == 0) ? (void*)out_regs.a1 : NULL;
+}
+
+inline static void free_himem(char* addr) {
+    
+    struct REGS in_regs = { 0 };
+    struct REGS out_regs = { 0 };
+
+    in_regs.d0 = 0xF8;      // IOCS _HIMEM
+    in_regs.d1 = 2;         // HIMEM_FREE
+    in_regs.d2 = (int)addr;
+
+    TRAP15(&in_regs, &out_regs);
+}
+
+//  direct memory allocation using DOSCALL (with malloc, we cannot allocate more than 64k, why?)
+inline static void* malloc__(int size) {
+  if (g_high_memory_mode) {
+    return malloc_himem(size);
+  }
   int addr = MALLOC(size);
   return (addr >= 0x81000000) ? NULL : (char*)addr;
 }
 
 inline static void free__(char* ptr) {
-  int addr;
   if (ptr == NULL) return;
-  addr = (int)ptr;
-  MFREE(addr);
+  if (g_high_memory_mode) {
+    free_himem(ptr);
+    return;
+  }
+  MFREE((int)ptr);
 }
 
 // paeth predictor for PNG filter mode 4
@@ -726,10 +764,10 @@ static void show_help_message() {
   printf("   -i ... show file information\n");
   printf("   -n ... image centering\n");
   printf("   -k ... wait key input\n");
-//  printf("   -r ... reversed schroll\n");
+  printf("   -u ... use high memory for buffers (set -b32 automatically)\n");
   printf("   -v<n> ... brightness (0-100)\n");
   printf("   -z ... show only one image randomly\n");
-  printf("   -b<n> ... buffer memory size factor[1-16] (default:8)\n");
+  printf("   -b<n> ... buffer memory size factor[1-32] (default:8)\n");
 }
 
 // main
@@ -755,15 +793,16 @@ int main(int argc, char* argv[]) {
         g_centering_mode = 1;
       } else if (argv[i][1] == 'k') {
         g_wait_mode = 1;
-      } else if (argv[i][1] == 'r') {
-        g_reversed_scroll = 1;
+      } else if (argv[i][1] == 'u') {
+        g_high_memory_mode = 1;
+        g_buffer_memory_size_factor = 32;
       } else if (argv[i][1] == 'z') {
         g_random_mode = 1;
       } else if (argv[i][1] == 'v') {
         g_brightness = atoi(argv[i]+2);
       } else if (argv[i][1] == 'b') {
         g_buffer_memory_size_factor = atoi(argv[i]+2);
-        if (g_buffer_memory_size_factor > 16) {
+        if (g_buffer_memory_size_factor > 32) {
           printf("error: too large memory factor.\n");
           return 1;
         }
