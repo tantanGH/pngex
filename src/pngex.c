@@ -7,7 +7,7 @@
 #include <iocslib.h>
 #include "zlib.h"
 
-#define VERSION "0.4.0"
+#define VERSION "0.4.1"
 // #define CHECK_CRC
 // #define DEBUG_FWRITE
 // #define DEBUG
@@ -169,7 +169,7 @@ static void initialize_screen() {
 }
 
 //  high memory operations
-inline static void* malloc_himem(int size) {
+inline static void* malloc_himem(size_t size) {
 
     struct REGS in_regs = { 0 };
     struct REGS out_regs = { 0 };
@@ -188,34 +188,34 @@ inline static void* malloc_himem(int size) {
     return (rc == 0) ? (void*)out_regs.a1 : NULL;
 }
 
-inline static void free_himem(char* addr) {
+inline static void free_himem(void* addr) {
     
     struct REGS in_regs = { 0 };
     struct REGS out_regs = { 0 };
 
     in_regs.d0 = 0xF8;      // IOCS _HIMEM
     in_regs.d1 = 2;         // HIMEM_FREE
-    in_regs.d2 = (int)addr;
+    in_regs.d2 = (size_t)addr;
 
     TRAP15(&in_regs, &out_regs);
 }
 
 //  direct memory allocation using DOSCALL (with malloc, we cannot allocate more than 64k, why?)
-inline static void* malloc__(int size) {
+inline static void* malloc__(size_t size) {
   if (g_high_memory_mode) {
     return malloc_himem(size);
   }
   int addr = MALLOC(size);
-  return (addr >= 0x81000000) ? NULL : (char*)addr;
+  return (addr >= 0x81000000) ? NULL : (void*)addr;
 }
 
-inline static void free__(char* ptr) {
+inline static void free__(void* ptr) {
   if (ptr == NULL) return;
   if (g_high_memory_mode) {
     free_himem(ptr);
     return;
   }
-  MFREE((int)ptr);
+  MFREE((size_t)ptr);
 }
 
 // paeth predictor for PNG filter mode 4
