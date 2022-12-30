@@ -7,7 +7,7 @@
 #include <iocslib.h>
 #include "zlib.h"
 
-#define VERSION "0.4.1"
+#define VERSION "0.5.0"
 // #define CHECK_CRC
 // #define DEBUG_FWRITE
 // #define DEBUG
@@ -164,8 +164,8 @@ static void initialize_screen() {
     *palette_ptr++ = (unsigned short)i;
   }
 
-  // back to user mode
-  SUPER(ssp);
+  // do not back to user mode
+  //SUPER(ssp);
 }
 
 //  high memory operations
@@ -239,7 +239,7 @@ inline static short paeth_predictor(short a, short b, short c) {
 static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_consumed, PNG_HEADER* png_headerp) {
 
   int consumed_size = 0;
-  int ssp;
+  //int ssp;
   int bytes_per_pixel = (png_headerp->color_type == PNG_COLOR_TYPE_RGBA) ? 4 : 3;
   unsigned char* buffer_end = buffer + buffer_size;
   volatile unsigned short* gvram_current;
@@ -257,7 +257,7 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
                                     g_start_x + ((g_current_x >= 0) ? g_current_x : 0);
 
   // supervisor mode
-  ssp = SUPER(0);
+  //ssp = SUPER(0);
 
   while (buffer < buffer_end) {
 
@@ -388,7 +388,7 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
 
   }
 
-  SUPER(ssp);
+  //SUPER(ssp);
 
   *buffer_consumed = (buffer_size - (int)(buffer_end - buffer));
 }
