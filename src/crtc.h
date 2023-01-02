@@ -15,7 +15,6 @@
 #define WAIT_VBLANK    while(GPIP[0] & 0x10)
 
 // prototype declarations
-void init_crtc(int extended_graphic_mode);
-void init_palette(void);
+void set_extra_crtc_mode(int extended_graphic_mode);
 
 #endif

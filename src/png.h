@@ -65,10 +65,10 @@ typedef struct {
 } PNG_DECODE_HANDLE;
 
 // prototype declarations
-void init_png(PNG_DECODE_HANDLE* png);
-void set_png_header(PNG_DECODE_HANDLE* png, PNG_HEADER* png_header);
-void quit_png(PNG_DECODE_HANDLE* png);
-int load_png_image(PNG_DECODE_HANDLE* png, const char* png_file_name );
-int describe_png_image(PNG_DECODE_HANDLE* png, const char* png_file_name);
+void png_init(PNG_DECODE_HANDLE* png);
+void png_set_header(PNG_DECODE_HANDLE* png, PNG_HEADER* png_header);
+void png_close(PNG_DECODE_HANDLE* png);
+int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name );
+int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name);
 
 #endif
