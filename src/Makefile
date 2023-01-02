@@ -17,6 +17,8 @@ GAS2HAS = perl ${XDEV68K_DIR}/util/x68k_gas2has.pl -cpu 68000 -inc doscall.inc -
 RUN68 = ${XDEV68K_DIR}/run68/run68
 HAS = $(RUN68) ${XDEV68K_DIR}/x68k_bin/HAS060.X
 HLK = $(RUN68) ${XDEV68K_DIR}/x68k_bin/hlk301.x
+LIB = $(RUN68) ${XDEV68K_DIR}/x68k_bin/lib.x
+AR = $(RUN68) ${XDEV68K_DIR}/x68k_bin/ar.x
 
 # 実行ファイル名
 TARGET_FILE = PNGEX.X
@@ -31,7 +33,7 @@ CFLAGS = $(COMMON_FLAGS) -Wno-builtin-declaration-mismatch -fcall-used-d2 -fcall
 	-z-stack=32768 -D__time_t_defined -D__clock_t_defined
 
 # *.c ソースファイル
-C_SRCS = pngex.c
+C_SRCS = memory.c crtc.c png.c pngex.c
 
 # *.s ソースファイル
 ASM_SRCS = 
@@ -56,7 +58,7 @@ OBJS =	$(addprefix $(INTERMEDIATE_DIR)/,$(patsubst %.c,%.o,$(C_SRCS))) \
 HLK_LINK_LIST = $(INTERMEDIATE_DIR)/_lk_list.tmp
 
 # Distribution package 
-PACKAGE_FILE = ../PNGEX050.ZIP
+PACKAGE_FILE = ../PNGEX060.ZIP
 
 # Document file
 DOCUMENT_FILE = PNGEX.DOC
@@ -100,3 +102,6 @@ $(INTERMEDIATE_DIR)/%.o : %.s Makefile
 
 package:
 	zip -j ${PACKAGE_FILE} ${INTERMEDIATE_DIR}/${TARGET_FILE} ${DOCUMENT_FILE} 
+
+library:
+	${LIB}
