@@ -1,7 +1,7 @@
 #include "crtc.h"
 
 // initialize 65536 color pallet
-void init_palette() {
+static void init_graphic_palette_65536() {
   int ofs = 0;
   for (int i = 0x0001; i <= 0x10000; i += 0x0202) {
     PALETTE_REG[ofs++] = (unsigned short)i;
@@ -10,7 +10,7 @@ void init_palette() {
 }
 
 // initialize ctrc mode
-void init_crtc(int use_extended_graphic) {
+void set_extra_crtc_mode(int use_extended_graphic) {
 
   // wait vsync
   WAIT_VDISP;
@@ -49,4 +49,5 @@ void init_crtc(int use_extended_graphic) {
     CRTC_R12[1] = 0;                // scroll position Y
   }
 
+  init_graphic_palette_65536();
 }

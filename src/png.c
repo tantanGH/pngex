@@ -7,7 +7,7 @@
 //
 //  initialize PNG decode handle
 //
-void init_png(PNG_DECODE_HANDLE* png) {
+void png_init(PNG_DECODE_HANDLE* png) {
 
   if (png->brightness == 0) {
     png->brightness = 100;
@@ -53,7 +53,7 @@ void init_png(PNG_DECODE_HANDLE* png) {
 //
 //  set PNG header (this can be done after we decode IHDR chunk)
 //
-void set_png_header(PNG_DECODE_HANDLE* png, PNG_HEADER* png_header) {
+void png_set_header(PNG_DECODE_HANDLE* png, PNG_HEADER* png_header) {
 
   // copy header content
   png->png_header.width              = png_header->width;
@@ -82,7 +82,7 @@ void set_png_header(PNG_DECODE_HANDLE* png, PNG_HEADER* png_header) {
 //
 //  release PNG decoder handle
 //
-void quit_png(PNG_DECODE_HANDLE* png) {
+void png_close(PNG_DECODE_HANDLE* png) {
 
   if (png == NULL) return;
 
@@ -369,7 +369,7 @@ static int inflate_data(char* input_buffer_ptr, int input_buffer_len, int* input
 //
 //  load PNG image
 //
-int load_png_image(PNG_DECODE_HANDLE* png, const char* png_file_name) {
+int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
 
   // return code
   int rc = -1;
@@ -490,7 +490,7 @@ int load_png_image(PNG_DECODE_HANDLE* png, const char* png_file_name) {
       }
 
       // set header to handle
-      set_png_header(png, &png_header);
+      png_set_header(png, &png_header);
 
     } else if (strcmp("IDAT",chunk_type) == 0) {
 
@@ -596,7 +596,7 @@ catch:
 //
 //  describe PNG file information
 //
-int describe_png_image(PNG_DECODE_HANDLE* png, const char* png_file_name) {
+int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name) {
 
   // return code
   int rc = -1;

@@ -57,9 +57,9 @@ static int process_files(int argc, char* argv[], int information_mode, int input
 #endif
         // single file
         if (information_mode) {
-          describe_png_image(png, file_name);
+          png_describe(png, file_name);
         } else {
-          load_png_image(png, file_name);
+          png_load(png, file_name);
         }
 #ifdef DEBUG
         printf("single file operation done.\n");
@@ -105,9 +105,9 @@ static int process_files(int argc, char* argv[], int information_mode, int input
             strcat(this_name,inf.name);
 
             if (information_mode) {
-              describe_png_image(png, this_name);
+              png_describe(png, this_name);
             } else {
-              load_png_image(png, this_name);
+              png_load(png, this_name);
             }
             if (key_wait) {
               getchar();
@@ -199,7 +199,7 @@ int main(int argc, char* argv[]) {
   png.output_buffer_size = 131072 * buffer_memory_size_factor;
 
   // init png decoder
-  init_png(&png);
+  png_init(&png);
 
   if (!information_mode) {
 
@@ -209,8 +209,7 @@ int main(int argc, char* argv[]) {
     }
  
     // initialize crtc and pallet
-    init_crtc(png.use_extended_graphic);
-    init_palette();
+    set_extra_crtc_mode(png.use_extended_graphic);
  
     // cursor display off
     C_CUROFF();
@@ -225,7 +224,7 @@ int main(int argc, char* argv[]) {
   rc = process_files(argc, argv, information_mode, input_file_count, random_mode, clear_screen, key_wait, &png);
 
 catch:
-  quit_png(&png);
+  png_close(&png);
 
   if (!information_mode) {
 
