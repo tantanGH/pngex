@@ -1,8 +1,9 @@
-#include "png.h"
-#include "memory.h"
-
 #include <doslib.h>
 #include <zlib.h>
+
+#include "png.h"
+#include "memory.h"
+#include "buffer.h"
 
 //
 //  initialize PNG decode handle
@@ -377,16 +378,15 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
   // for file operation
   FILE* fp;
   char signature[8];
-  char chunk_type[5];
-  int chunk_size, chunk_crc, read_size;
 
   // png header
   PNG_HEADER png_header;
 
-  // for zlib inflate operation
-  char* input_buffer_ptr = NULL;
+  // input buffer
+  BUFFER_HANDLE input_buffer = { 0 };
+
+  // output buffer
   char* output_buffer_ptr = NULL;
-  int input_buffer_offset = 0;
   int output_buffer_offset = 0;
 
   // for zlib inflate operation  
@@ -412,64 +412,51 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
     goto catch;
   }
 
-  // read first 8 bytes as signature
-  read_size = fread(signature, 1, 8, fp);
+  // instantiate input buffer
+  input_buffer.buffer_size = png->input_buffer_size;
+  if (buffer_open(&input_buffer, fp) != 0) {
+    printf("error: input buffer initialization error.\n");
+    goto catch;
+  }
 
   // check signature
-  if (png->no_signature_check == 0 && memcmp(signature,"\x89PNG\r\n\x1a\n",8) != 0 ) {
+  buffer_copy(&input_buffer, signature, 8);
+  if (!png->no_signature_check && memcmp(signature,"\x89PNG\r\n\x1a\n",8) != 0 ) {
     printf("error: signature error. not a PNG file (%s).\n", png_file_name);
     goto catch;
   }
 
-  // allocate input buffer memory
-  input_buffer_ptr = malloc_himem(png->input_buffer_size,png->use_high_memory);
-  if (input_buffer_ptr == NULL) {
-    printf("error: cannot allocate memory for input buffer.\n");
-    goto catch;
-  }
-  
   // allocate output buffer memory
-  output_buffer_ptr= malloc_himem(png->output_buffer_size,png->use_high_memory);
+  output_buffer_ptr = malloc_himem(png->output_buffer_size,png->use_high_memory);
     if (output_buffer_ptr == NULL) {
     printf("error: cannot allocate memory for output buffer.\n");
     goto catch;
   }
 
   // process PNG file chunk by chunk
-  while ((read_size = fread((char*)(&chunk_size), 1, 4, fp)) > 0) {
+  for (;;) {
 
-    // read first 4 bytes as chunk size
+    char chunk_type[5];
+  
+    // get chunk size  
+    int chunk_size = buffer_get_uint(&input_buffer, 0);
 
-    // read next 4 bytes as chuck type
-    fread(chunk_type, 1, 4, fp);
+    // get chunk type
+    buffer_copy(&input_buffer, chunk_type, 4);
     chunk_type[4] = '\0';
 
     if (strcmp("IHDR",chunk_type) == 0) {
 
       // IHDR - header chunk, we can assume this chunk appears at top
-
-#ifdef CHECK_CRC
-      unsigned int checksum;
-#endif
-
-      fread(input_buffer_ptr, 1, chunk_size, fp);     // read chunk data to input buffer
-      fread((char*)(&chunk_crc), 1, 4, fp);           // read 4 bytes as CRC
-#ifdef CHECK_CRC
-      checksum = crc32(crc32(0, chunk_type, 4), chunk_data_ptr, chunk_size);
-      if (checksum != chunk_crc) {                    // check CRC if needed
-        printf("error: crc error.\n");
-        goto catch;
-      }
-#endif
-
+ 
       // parse header
-      png_header.width              = *((int*)(input_buffer_ptr + 0));
-      png_header.height             = *((int*)(input_buffer_ptr + 4));
-      png_header.bit_depth          = input_buffer_ptr[8];
-      png_header.color_type         = input_buffer_ptr[9];
-      png_header.compression_method = input_buffer_ptr[10];
-      png_header.filter_method      = input_buffer_ptr[11];
-      png_header.interlace_method   = input_buffer_ptr[12];
+      png_header.width              = buffer_get_uint(&input_buffer, 0);
+      png_header.height             = buffer_get_uint(&input_buffer, 0);
+      png_header.bit_depth          = buffer_get_uchar(&input_buffer);
+      png_header.color_type         = buffer_get_uchar(&input_buffer);
+      png_header.compression_method = buffer_get_uchar(&input_buffer);
+      png_header.filter_method      = buffer_get_uchar(&input_buffer);
+      png_header.interlace_method   = buffer_get_uchar(&input_buffer);
 
       // check bit depth (support 8bit color only)
       if (png_header.bit_depth != 8) {
@@ -492,26 +479,18 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
       // set header to handle
       png_set_header(png, &png_header);
 
+      // skip remaining bytes and crc
+      buffer_skip(&input_buffer, (chunk_size - 13) + 4);
+
     } else if (strcmp("IDAT",chunk_type) == 0) {
 
       // IDAT - data chunk, may appear several times
-#ifdef CHECK_CRC
-      unsigned int checksum;
-#endif
-      if (chunk_size > (png->input_buffer_size - input_buffer_offset)) {
-        int input_buffer_consumed = 0;
-        int z_status;
-#ifdef DEBUG
-        printf("no more space in input buffer, need to consume. (ofs=%d,chunksize=%d)\n",input_buffer_offset,chunk_size);
-#endif
-        z_status = inflate_data(input_buffer_ptr,input_buffer_offset,&input_buffer_consumed,output_buffer_ptr,png->output_buffer_size,&zis,png);
-        if (z_status != Z_OK && z_status != Z_STREAM_END) {
-          printf("error: zlib data decompression error(%d).\n",z_status);
-          goto catch;
-        }
-#ifdef DEBUG
-        printf("inflated. input consumed=%d\n",input_buffer_consumed);
-#endif
+      int input_buffer_consumed;
+      int z_status = inflate_data(&input_buffer,&input_buffer_consumed,output_buffer_ptr,png->output_buffer_size,&zis,png);
+      if (z_status != Z_OK && z_status != Z_STREAM_END) {
+        printf("error: zlib data decompression error(%d).\n",z_status);
+        goto catch;
+      }
         // in case we cannot consume all the data inflate data, move it to the top of the buffer for the following use
         if (input_buffer_consumed < input_buffer_offset) {
           memcpy(input_buffer_ptr,input_buffer_ptr+input_buffer_consumed,input_buffer_offset - input_buffer_consumed);
@@ -550,7 +529,7 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
     } else {
 
       // unknown chunk - just skip
-      fseek(fp, chunk_size + 4, SEEK_CUR);
+      buffer_skip(&input_buffer, chunk_size + 4;
 
     }
 
@@ -577,11 +556,8 @@ catch:
   // close source PNG file
   fclose(fp);
 
-  // reclaim input buffer memory
-  if (input_buffer_ptr != NULL) {
-    free_himem(input_buffer_ptr, png->use_high_memory);
-    input_buffer_ptr = NULL;
-  }
+  // close input buffer
+  buffer_close(&input_buffer);
 
   // reclaim output buffer memory
   if (output_buffer_ptr > 0) {
@@ -604,15 +580,12 @@ int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name) {
   // for file operation
   FILE* fp;
   char signature[8];
-  char chunk_type[5];
-  int chunk_size, chunk_crc, read_size;
 
   // png header
   PNG_HEADER png_header;
 
-  // for zlib inflate operation
-  char* input_buffer_ptr = NULL;
-  int input_buffer_offset = 0;
+  // input buffer
+  BUFFER_HANDLE input_buffer = { 0 };
 
   // open source file
   fp = fopen(png_file_name, "rb");
@@ -620,32 +593,31 @@ int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name) {
     printf("error: cannot open input file (%s).\n", png_file_name);
     goto catch;
   }
-#ifdef DEBUG 
-  printf("file opened for information\n");
-#endif
-  // read first 8 bytes as signature
-  read_size = fread(signature, 1, 8, fp);
 
-  // check signature
-  if (png->no_signature_check == 0 && memcmp(signature,"\x89PNG\r\n\x1a\n",8) != 0 ) {
-    printf("error: signature error. not a PNG file (%s).\n", png_file_name);
+  // instantiate input buffer
+  input_buffer.buffer_size = png->input_buffer_size;
+  if (buffer_open(&input_buffer, fp) != 0) {
+    printf("error: input buffer initialization error.\n");
     goto catch;
   }
 
-  // allocate input buffer memory
-  input_buffer_ptr = malloc_himem(png->input_buffer_size,png->use_high_memory);
-  if (input_buffer_ptr == NULL) {
-    printf("error: cannot allocate memory for input buffer.\n");
+  // check signature
+  buffer_copy(&input_buffer, signature, 8);
+  if (!png->no_signature_check && memcmp(signature,"\x89PNG\r\n\x1a\n",8) != 0) {
+    printf("error: signature error. not a PNG file (%s).\n", png_file_name);
     goto catch;
   }
   
   // process PNG file chunk by chunk
-  while ((read_size = fread((char*)(&chunk_size), 1, 4, fp)) > 0) {
-
-    // read first 4 bytes as chunk size
+  for (;;) {
+ 
+    char chunk_type[5];
+ 
+    // get chunk size from buffer
+    int chunk_size = buffer_get_uint(&input_buffer, 0);
 
     // read next 4 bytes as chuck type
-    fread(chunk_type, 1, 4, fp);
+    buffer_copy(&input_buffer, (unsigned char*)&chunk_type, 4);
     chunk_type[4] = '\0';
 
     if (strcmp("IHDR",chunk_type) == 0) {
@@ -653,28 +625,14 @@ int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name) {
       // IHDR - header chunk, we can assume this chunk appears at top
       struct FILBUF inf;
 
-#ifdef CHECK_CRC
-      unsigned int checksum;
-#endif
-
-      fread(input_buffer_ptr, 1, chunk_size, fp);     // read chunk data to input buffer
-      fread((char*)(&chunk_crc), 1, 4, fp);           // read 4 bytes as CRC
-#ifdef CHECK_CRC
-      checksum = crc32(crc32(0, chunk_type, 4), chunk_data_ptr, chunk_size);
-      if (checksum != chunk_crc) {                    // check CRC if needed
-        printf("error: crc error.\n");
-        goto catch;
-      }
-#endif
-
       // parse header
-      png_header.width              = *((int*)(input_buffer_ptr + 0));
-      png_header.height             = *((int*)(input_buffer_ptr + 4));
-      png_header.bit_depth          = input_buffer_ptr[8];
-      png_header.color_type         = input_buffer_ptr[9];
-      png_header.compression_method = input_buffer_ptr[10];
-      png_header.filter_method      = input_buffer_ptr[11];
-      png_header.interlace_method   = input_buffer_ptr[12];
+      png_header.width              = buffer_get_uint(&input_buffer, 0);
+      png_header.height             = buffer_get_uint(&input_buffer, 0);
+      png_header.bit_depth          = buffer_get_uchar(&input_buffer);
+      png_header.color_type         = buffer_get_uchar(&input_buffer);
+      png_header.compression_method = buffer_get_uchar(&input_buffer);
+      png_header.filter_method      = buffer_get_uchar(&input_buffer);
+      png_header.interlace_method   = buffer_get_uchar(&input_buffer);
 
       FILES(&inf,(unsigned char*)png_file_name,0x23);
       printf("--\n");
@@ -686,29 +644,25 @@ int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name) {
       printf(" bit depth: %d\n",png_header.bit_depth);
       printf("color type: %d\n",png_header.color_type);
       printf(" interlace: %d\n",png_header.interlace_method);
+
+      rc = 0;
       break;
 
     } else {
 
       // skip other chunks
-      fseek(fp, chunk_size + 4, SEEK_CUR);
+      buffer_skip(&input_buffer, chunk_size + 4);
 
     }
 
   }
 
-  // succeeded
-  rc = 0;
-
 catch:
+  // close buffer
+  buffer_close(&input_buffer);
+
   // close source PNG file
   fclose(fp);
-
-  // reclaim input buffer memory
-  if (input_buffer_ptr != NULL) {
-    free_himem(input_buffer_ptr, png->use_high_memory);
-    input_buffer_ptr = NULL;
-  }
 
   // done
   return rc;
