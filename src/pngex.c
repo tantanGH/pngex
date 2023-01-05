@@ -52,18 +52,17 @@ static int process_files(int argc, char* argv[], int information_mode, int input
     if (!random_mode || file_index == random_index) {
 
       if (jstrchr(file_name,'*') == NULL && jstrchr(file_name,'?') == NULL) {
-#ifdef DEBUG
-        printf("single file operation.\n");
-#endif
+
         // single file
         if (information_mode) {
           png_describe(png, file_name);
         } else {
           png_load(png, file_name);
         }
-#ifdef DEBUG
-        printf("single file operation done.\n");
-#endif
+        if (key_wait) {
+          getchar();
+        }
+
       } else {
 
         // expand wild card

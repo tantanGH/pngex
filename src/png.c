@@ -5,6 +5,8 @@
 #include "memory.h"
 #include "buffer.h"
 
+//#define DEBUG
+
 //
 //  initialize PNG decode handle
 //
@@ -145,7 +147,6 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
   int consumed_size = 0;
   int bytes_per_pixel = (png->png_header.color_type == PNG_COLOR_TYPE_RGBA) ? 4 : 3;
   unsigned char* buffer_end = buffer + buffer_size;
-  volatile unsigned short* gvram_current;
   
   // cropping check
   if ((png->offset_y + png->current_y) >= png->actual_height) {
@@ -155,7 +156,7 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
   }
 
   // GVRAM entry point
-  gvram_current = (unsigned short*)GVRAM +  
+  volatile unsigned short* gvram_current = (unsigned short*)GVRAM +  
                                     png->actual_width * (png->offset_y + png->current_y) + 
                                     png->offset_x + (png->current_x >= 0 ? png->current_x : 0);
 
@@ -173,10 +174,6 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
 
     } else {
 
-      short r,rf;
-      short g,gf;
-      short b,bf;
-
       // before plotting, need to ensure we have accessible 3(or 4 bytes) in the inflated buffer
       // if not, we give up now and return
       if ((buffer_end - buffer) < bytes_per_pixel) {
@@ -184,14 +181,17 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
       }
 
       // get raw RGB data
-      r = *buffer++;
-      g = *buffer++;
-      b = *buffer++;
+      short r = *buffer++;
+      short g = *buffer++;
+      short b = *buffer++;
 
       // ignore 4th byte in RGBA mode
       if (png->png_header.color_type == PNG_COLOR_TYPE_RGBA) {
         buffer++;      
       }
+
+      // filtered RGB
+      short rf, gf, bf;
 
       // apply filter
       switch (png->current_filter) {
@@ -294,64 +294,110 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
 //
 //  inflate compressed data stream
 //
-static int inflate_data(char* input_buffer_ptr, int input_buffer_len, int* input_buffer_consumed, 
-                        char* output_buffer_ptr, int output_buffer_len,
-                        z_stream* zisp, PNG_DECODE_HANDLE* png) {
+static int inflate_data(BUFFER_HANDLE* input_buffer, BUFFER_HANDLE* output_buffer, z_stream* zisp, PNG_DECODE_HANDLE* png) {
 
   int z_status = Z_OK;
-  int in_consumed_size = 0;
-  
-  zisp->next_in = input_buffer_ptr;
-  zisp->avail_in = input_buffer_len;
+
+#ifdef DEBUG
+  printf("input_buffer->rofs=%d,output_buffer->wofs=%d\n",input_buffer->rofs,output_buffer->wofs);
+#endif
+
+  zisp->next_in = input_buffer->buffer_data + input_buffer->rofs;
+  zisp->avail_in = input_buffer->buffer_size - input_buffer->rofs;
   if (zisp->next_out == Z_NULL) {
-    zisp->next_out = output_buffer_ptr;
-    zisp->avail_out = output_buffer_len;
+    zisp->next_out = output_buffer->buffer_data + output_buffer->wofs;
+    zisp->avail_out = output_buffer->buffer_size - output_buffer->wofs;
   }
+
+#ifdef DEBUG
+    printf("z_status=%d,avail_in=%d,avail_out=%d\n",z_status,zisp->avail_in,zisp->avail_out);
+#endif
 
   while (zisp->avail_in > 0) {
 
     int avail_in_cur = zisp->avail_in;
+    int avail_out_cur = zisp->avail_out;
 
     // inflate
     z_status = inflate(zisp,Z_NO_FLUSH);
-
+#ifdef DEBUG
+    printf("inflated. z_status=%d,avail_in_cur=%d,avail_in=%d,avail_out_cur=%d,avail_out=%d,wofs=%d\n",z_status,avail_in_cur,zisp->avail_in,avail_out_cur,zisp->avail_out,output_buffer->wofs);
+#endif
     if (z_status == Z_OK) {
 
-      int in_consumed_size_this = avail_in_cur - zisp->avail_in;
-      int out_inflated_size = output_buffer_len - zisp->avail_out;
-      int out_consumed_size, out_remain_size;
+      // input buffer consumed
+      int in_consumed_size = avail_in_cur - zisp->avail_in;
+      input_buffer->rofs += in_consumed_size;
+      if (input_buffer->rofs >= input_buffer->buffer_size) {
+#ifdef DEBUG        
+    printf("input buffer fully consumed. z_status=%d,avail_in=%d,avail_out=%d\n",z_status,zisp->avail_in,zisp->avail_out);
+#endif
+        input_buffer->rofs = 0;     // but not yet refilled
+      }
 
-      in_consumed_size += in_consumed_size_this;
+      // output buffer consumed
+      int inflated_size = avail_out_cur - zisp->avail_out;
+      output_buffer->wofs += inflated_size;  
 
       // output pixel
-      output_pixel(output_buffer_ptr,out_inflated_size,&out_consumed_size,png);
+#ifdef DEBUG
+      printf("output_buffer->rofs=%d\n",output_buffer->rofs);
+#endif
+      int out_consumable_size = output_buffer->wofs - output_buffer->rofs;
+      int out_consumed_size;
+      output_pixel(output_buffer->buffer_data + output_buffer->rofs, out_consumable_size, &out_consumed_size, png);
 
       // in case we cannot consume all the inflated data, reuse it for the next output
-      out_remain_size = out_inflated_size - out_consumed_size;
+      int out_remain_size = out_consumable_size - out_consumed_size;
+#ifdef DEBUG        
+    printf("output pixel done. z_status=%d,avail_in=%d,avail_out=%d,out_consumed=%d,remain=%d\n",z_status,zisp->avail_in,zisp->avail_out,out_consumed_size,out_remain_size);
+#endif
       if (out_remain_size > 0) {
-        memcpy(output_buffer_ptr, output_buffer_ptr + out_consumed_size, out_remain_size);
+#ifdef DEBUG        
+    printf("output buffer remained. z_status=%d,avail_in=%d,avail_out=%d,inflated=%d,out_consumed=%d,out_remain=%d\n",z_status,zisp->avail_in,zisp->avail_out,inflated_size,out_consumed_size,out_remain_size);
+#endif
+        memcpy(output_buffer->buffer_data, output_buffer->buffer_data + out_consumed_size, out_remain_size);
+        output_buffer->wofs = out_remain_size;
+        output_buffer->rofs = 0;
+      } else {
+        output_buffer->wofs = 0;
+        output_buffer->rofs = 0;
       }
 
       // for next inflate operation
-      zisp->next_in = input_buffer_ptr + in_consumed_size;
-      zisp->next_out = output_buffer_ptr + out_remain_size;
-      zisp->avail_out = output_buffer_len - out_remain_size;
+      zisp->next_in = input_buffer->buffer_data + input_buffer->rofs;
+      zisp->next_out = output_buffer->buffer_data + output_buffer->wofs;
+      zisp->avail_out = output_buffer->buffer_size - output_buffer->wofs;
 
     } else if (z_status == Z_STREAM_END) {
 
-      int in_consumed_size_this = avail_in_cur - zisp->avail_in;
-      int out_inflated_size = output_buffer_len - zisp->avail_out;
-      int out_remain_size, out_consumed_size;
+      // output buffer written
+      int inflated_size = avail_out_cur - zisp->avail_out;
+      output_buffer->wofs += inflated_size;  
 
-      in_consumed_size += in_consumed_size_this;
+      // input buffer consumed
+      input_buffer->rofs += avail_in_cur - zisp->avail_in;
+      if (input_buffer->rofs >= input_buffer->buffer_size) {
+        input_buffer->rofs = 0;
+      }
 
       // output pixel
-      output_pixel(output_buffer_ptr,out_inflated_size,&out_consumed_size,png);
+#ifdef DEBUG
+      printf("output_buffer->rofs=%d\n",output_buffer->rofs);
+#endif
+      int out_consumable_size = output_buffer->wofs - output_buffer->rofs;
+      int out_consumed_size;
+      output_pixel(output_buffer->buffer_data + output_buffer->rofs, out_consumable_size, &out_consumed_size, png);
 
       // in case we cannot consume all the inflated data, reuse it for the next output
-      out_remain_size = out_inflated_size - out_consumed_size;
+      int out_remain_size = out_consumable_size - out_consumed_size;
       if (out_remain_size > 0) {
-        memcpy(output_buffer_ptr, output_buffer_ptr + out_consumed_size, out_remain_size);
+        memcpy(output_buffer->buffer_data, output_buffer->buffer_data + out_consumed_size, out_remain_size);
+        output_buffer->wofs = out_remain_size;
+        output_buffer->rofs = 0;
+      } else {
+        output_buffer->wofs = 0;
+        output_buffer->rofs = 0;
       }
 
       break;
@@ -361,8 +407,6 @@ static int inflate_data(char* input_buffer_ptr, int input_buffer_len, int* input
       break;
     }
   }
-
-  *input_buffer_consumed = in_consumed_size;
 
   return z_status;
 }
@@ -386,11 +430,10 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
   BUFFER_HANDLE input_buffer = { 0 };
 
   // output buffer
-  char* output_buffer_ptr = NULL;
-  int output_buffer_offset = 0;
+  BUFFER_HANDLE output_buffer = { 0 };
 
   // for zlib inflate operation  
-  z_stream zis;                     // inflation stream
+  z_stream zis;
   zis.zalloc = Z_NULL;
   zis.zfree = Z_NULL;
   zis.opaque = Z_NULL;
@@ -419,36 +462,52 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
     goto catch;
   }
 
+  // fill the buffer for signature
+  if (buffer_fill(&input_buffer, 8, 0) < 8) {
+    printf("error: file is too small to check signature. not a PNG file (%s).\n", png_file_name);
+    goto catch;
+  }
+
   // check signature
-  buffer_copy(&input_buffer, signature, 8);
+  buffer_read(&input_buffer, signature, 8);
   if (!png->no_signature_check && memcmp(signature,"\x89PNG\r\n\x1a\n",8) != 0 ) {
     printf("error: signature error. not a PNG file (%s).\n", png_file_name);
     goto catch;
   }
 
-  // allocate output buffer memory
-  output_buffer_ptr = malloc_himem(png->output_buffer_size,png->use_high_memory);
-    if (output_buffer_ptr == NULL) {
-    printf("error: cannot allocate memory for output buffer.\n");
+  // instantiate output buffer
+  output_buffer.buffer_size = png->output_buffer_size;
+  if (buffer_open(&output_buffer, NULL) != 0) {
+    printf("error: output buffer initialization error.\n");
     goto catch;
   }
 
   // process PNG file chunk by chunk
   for (;;) {
 
+    int chunk_size, chunk_crc;
     char chunk_type[5];
   
-    // get chunk size  
-    int chunk_size = buffer_get_uint(&input_buffer, 0);
+    // get chunk size from file (not buffer)
+    //int chunk_size = buffer_get_uint(&input_buffer, 0);
+    fread((void*)&chunk_size, 1, 4, fp);
 
-    // get chunk type
-    buffer_copy(&input_buffer, chunk_type, 4);
+    // get chunk type from file (not buffer)
+    //buffer_copy(&input_buffer, chunk_type, 4);
+    fread(chunk_type, 1, 4, fp);
     chunk_type[4] = '\0';
+
+#ifdef DEBUG
+    printf("chunk_type = [%s], chunk_size = [%d], rofs = [%d], wofs = [%d]\n", chunk_type, chunk_size, input_buffer.rofs, input_buffer.wofs);
+#endif
 
     if (strcmp("IHDR",chunk_type) == 0) {
 
       // IHDR - header chunk, we can assume this chunk appears at top
- 
+
+      // read chunk data and crc into input buffer
+      buffer_fill(&input_buffer, chunk_size + 4, 0);
+
       // parse header
       png_header.width              = buffer_get_uint(&input_buffer, 0);
       png_header.height             = buffer_get_uint(&input_buffer, 0);
@@ -479,71 +538,68 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
       // set header to handle
       png_set_header(png, &png_header);
 
-      // skip remaining bytes and crc
-      buffer_skip(&input_buffer, (chunk_size - 13) + 4);
+      // reset buffer
+      //buffer_skip(&input_buffer, (chunk_size - 13) + 4);
+      buffer_reset(&input_buffer);
 
     } else if (strcmp("IDAT",chunk_type) == 0) {
 
       // IDAT - data chunk, may appear several times
-      int input_buffer_consumed;
-      int z_status = inflate_data(&input_buffer,&input_buffer_consumed,output_buffer_ptr,png->output_buffer_size,&zis,png);
-      if (z_status != Z_OK && z_status != Z_STREAM_END) {
-        printf("error: zlib data decompression error(%d).\n",z_status);
-        goto catch;
-      }
-        // in case we cannot consume all the data inflate data, move it to the top of the buffer for the following use
-        if (input_buffer_consumed < input_buffer_offset) {
-          memcpy(input_buffer_ptr,input_buffer_ptr+input_buffer_consumed,input_buffer_offset - input_buffer_consumed);
-          input_buffer_offset = input_buffer_consumed;
-        } else {
-          input_buffer_offset = 0;
-        }
-
-      } else {
-#ifdef DEBUG
-        printf("input buffer memory is still not full. (ofs=%d,chunksize=%d)\n",input_buffer_offset,chunk_size);
-#endif
-      }
 
       // read chunk data into input buffer
-      fread(input_buffer_ptr + input_buffer_offset, 1, chunk_size, fp);
-      input_buffer_offset += chunk_size;
-
-      fread((char*)(&chunk_crc), 1, 4, fp);
-#ifdef CHECK_CRC
-      checksum = crc32(crc32(0, chunk_type, 4), input_buffer_ptr + input_buffer_offset, chunk_size);
-      if (checksum != chunk_crc) {
-        printf("error: crc error.\n");
+      int filled_size = buffer_fill(&input_buffer, chunk_size, 0);
+      if (filled_size < 0) {
+        printf("error: buffer error. unread data were overwritten.\n");
         goto catch;
-      }
+      } else if (filled_size < chunk_size) {
+#ifdef DEBUG
+        printf("reached to buffer end. cannot read all the data. (filled=%d,chunk_size=%d,rofs=%d,wofs=%d)\n",filled_size,chunk_size,input_buffer.rofs,input_buffer.wofs);
 #endif
+        // consume data here
+        int z_status = inflate_data(&input_buffer, &output_buffer, &zis, png);
+        if (z_status != Z_OK && z_status != Z_STREAM_END) {
+          printf("error: zlib data decompression error(%d).\n",z_status);
+          goto catch;
+        }
+
+        // back to buffer top and refill
+        int refilled_size = buffer_fill(&input_buffer, chunk_size - filled_size, 1);
+        if (refilled_size < 0) {
+          printf("error: buffer error. unread data were overwritten.\n");
+          goto catch;          
+        }
+#ifdef DEBUG
+        printf("refilled %d bytes. (rofs=%d,wofs=%d)\n",refilled_size,input_buffer.rofs,input_buffer.wofs);
+#endif        
+      }
+
+      // read crc from file (not from buffer)
+      fread((char*)(&chunk_crc), 1, 4, fp);
+
+      // no crc check
 
     } else if (strcmp("IEND",chunk_type) == 0) {
 
       // IEND chunk - the very last chunk
-#ifdef DEBUG
-      printf("found IEND.\n");
-#endif
       break;
 
     } else {
 
       // unknown chunk - just skip
-      buffer_skip(&input_buffer, chunk_size + 4;
+      fseek(fp, chunk_size + 4, SEEK_CUR);
 
     }
 
   }
 
   // do we have any unconsumed data?
-  if (input_buffer_offset > 0) {
-    int input_buffer_consumed = 0;
-    int z_status = inflate_data(input_buffer_ptr,input_buffer_offset,&input_buffer_consumed,output_buffer_ptr,png->output_buffer_size,&zis,png);
+  if (input_buffer.rofs != input_buffer.wofs) {
+    // consume data here
+    int z_status = inflate_data(&input_buffer,&output_buffer,&zis,png);
     if (z_status != Z_OK && z_status != Z_STREAM_END) {
       printf("error: zlib data decompression error(%d).\n",z_status);
       goto catch;
     }
-    input_buffer_offset = (input_buffer_offset == input_buffer_consumed) ? 0 : input_buffer_consumed;
   }
 
   // complete zlib inflation stream operation
@@ -555,16 +611,13 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
 catch:
   // close source PNG file
   fclose(fp);
-
+  
   // close input buffer
   buffer_close(&input_buffer);
 
-  // reclaim output buffer memory
-  if (output_buffer_ptr > 0) {
-    free_himem(output_buffer_ptr, png->use_high_memory);
-    output_buffer_ptr = NULL;
-  }
-
+  // close output buffer
+  buffer_close(&output_buffer);
+  
   // done
   return rc;
 }
@@ -601,8 +654,14 @@ int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name) {
     goto catch;
   }
 
+  // fill the buffer as much as possible
+  if (buffer_fill(&input_buffer, -1, 0) < 8) {
+    printf("error: file is too small to check signature. not a PNG file (%s).\n", png_file_name);
+    goto catch;
+  }
+
   // check signature
-  buffer_copy(&input_buffer, signature, 8);
+  buffer_read(&input_buffer, signature, 8);
   if (!png->no_signature_check && memcmp(signature,"\x89PNG\r\n\x1a\n",8) != 0) {
     printf("error: signature error. not a PNG file (%s).\n", png_file_name);
     goto catch;
@@ -617,7 +676,7 @@ int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name) {
     int chunk_size = buffer_get_uint(&input_buffer, 0);
 
     // read next 4 bytes as chuck type
-    buffer_copy(&input_buffer, (unsigned char*)&chunk_type, 4);
+    buffer_read(&input_buffer, (unsigned char*)&chunk_type, 4);
     chunk_type[4] = '\0';
 
     if (strcmp("IHDR",chunk_type) == 0) {
