@@ -33,7 +33,7 @@ CFLAGS = $(COMMON_FLAGS) -Wno-builtin-declaration-mismatch -fcall-used-d2 -fcall
 	-z-stack=32768 -D__time_t_defined -D__clock_t_defined
 
 # *.c ソースファイル
-C_SRCS = memory.c crtc.c png.c pngex.c
+C_SRCS = crtc.c memory.c buffer.c png.c pngex.c
 
 # *.s ソースファイル
 ASM_SRCS = 
