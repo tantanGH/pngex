@@ -59,6 +59,9 @@ static int process_files(int argc, char* argv[], int information_mode, int input
         } else {
           png_load(png, file_name);
         }
+#ifdef DEBUG
+        printf("single file operation done.\n");
+#endif
         if (key_wait) {
           getchar();
         }
