@@ -17,8 +17,8 @@ GAS2HAS = perl ${XDEV68K_DIR}/util/x68k_gas2has.pl -cpu 68000 -inc doscall.inc -
 RUN68 = ${XDEV68K_DIR}/run68/run68
 HAS = $(RUN68) ${XDEV68K_DIR}/x68k_bin/HAS060.X
 HLK = $(RUN68) ${XDEV68K_DIR}/x68k_bin/hlk301.x
-LIB = $(RUN68) ${XDEV68K_DIR}/x68k_bin/lib.x
-AR = $(RUN68) ${XDEV68K_DIR}/x68k_bin/ar.x
+LIB = $(RUN68) ${XDEV68K_DIR}/x68k_bin/LIB.X
+AR = $(RUN68) ${XDEV68K_DIR}/x68k_bin/AR.X
 
 # 実行ファイル名
 TARGET_FILE = PNGEX.X
@@ -57,8 +57,14 @@ OBJS =	$(addprefix $(INTERMEDIATE_DIR)/,$(patsubst %.c,%.o,$(C_SRCS))) \
 # HLK に入力するリンクリスト
 HLK_LINK_LIST = $(INTERMEDIATE_DIR)/_lk_list.tmp
 
+# Library file
+LIBRARY_FILE = libpngex.a
+
+# Library package file
+LIBRARY_PACKAGE_FILE = ../LBPNG071.ZIP
+
 # Distribution package 
-PACKAGE_FILE = ../PNGEX070.ZIP
+PACKAGE_FILE = ../PNGEX071.ZIP
 
 # Document file
 DOCUMENT_FILE = PNGEX.DOC
@@ -104,4 +110,5 @@ package:
 	zip -j ${PACKAGE_FILE} ${INTERMEDIATE_DIR}/${TARGET_FILE} ${DOCUMENT_FILE} 
 
 library:
-	${LIB}
+	cd $(INTERMEDIATE_DIR); $(AR) $(LIBRARY_FILE) png.o; cd ..
+	zip -j $(LIBRARY_PACKAGE_FILE) $(INTERMEDIATE_DIR)/$(LIBRARY_FILE) png.h

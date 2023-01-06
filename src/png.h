@@ -1,19 +1,12 @@
 #ifndef __H_PNG__
 #define __H_PNG__
 
-#include <stdio.h>
-#include <string.h>
-
-// GVRAM memory address
-#define GVRAM       ((volatile unsigned short*)0xC00000)
-
 // PNG color type
 #define PNG_COLOR_TYPE_RGB  2
 #define PNG_COLOR_TYPE_RGBA 6
 
 // PNG header structure
 typedef struct {
-
   int width;
   int height;
   char bit_depth;

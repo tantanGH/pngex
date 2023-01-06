@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "buffer.h"
 #include "memory.h"
 
