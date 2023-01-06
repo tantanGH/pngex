@@ -1,3 +1,6 @@
+#include <doslib.h>
+#include <iocslib.h>
+
 #include "memory.h"
 
 //

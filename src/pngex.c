@@ -188,7 +188,8 @@ int main(int argc, char* argv[]) {
 
   if (input_file_count <= 0) {
     printf("error: no input file.\n");
-    return 1;
+    rc = 1;
+    goto quit;
   }
 
   // input buffer = 64KB * factor
@@ -201,6 +202,13 @@ int main(int argc, char* argv[]) {
   png_init(&png);
 
   if (!information_mode) {
+
+    // check current graphic use
+    int usage = TGUSEMD(0,-1);
+    if (usage == 1 || usage == 2) {
+      printf("error: graphic vram is used by other applications.\n");
+      goto catch;
+    }
 
     // screen clear if needed
     if (clear_screen) {
@@ -222,9 +230,6 @@ int main(int argc, char* argv[]) {
   // process files
   rc = process_files(argc, argv, information_mode, input_file_count, random_mode, clear_screen, key_wait, &png);
 
-catch:
-  png_close(&png);
-
   if (!information_mode) {
 
     // cursor on
@@ -234,6 +239,9 @@ catch:
     C_FNKMOD(func_key_display_mode);
 
   }
+
+catch:
+  png_close(&png);
 
 quit:
   return rc;

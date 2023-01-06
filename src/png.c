@@ -1,9 +1,14 @@
+#include <stdio.h>
+#include <string.h>
 #include <doslib.h>
 #include <zlib.h>
 
 #include "png.h"
 #include "memory.h"
 #include "buffer.h"
+
+// GVRAM memory address
+#define GVRAM       ((volatile unsigned short*)0xC00000)
 
 //#define DEBUG
 

@@ -2,7 +2,6 @@
 #define __H_BUILD__
 
 #include <stdio.h>
-#include <string.h>
 
 // ringer buffer handle
 typedef struct {
