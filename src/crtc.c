@@ -1,24 +1,16 @@
 #include "crtc.h"
 
-// graphic ops memory addresses
-#define CRTC_R00    ((volatile unsigned short*)0xE80000)     // CRTC R00-R08 (Inside X68000 p232)
-#define CRTC_R12    ((volatile unsigned short*)0xE80018)     // CRTC R12 for scroll (Insite X68000 p197)
-#define CRTC_R20    ((volatile unsigned short*)0xE80028)     // CRTC R20 (Inside X68000 p234)
-#define VDC_R0      ((volatile unsigned short*)0xE82400)     // video controller (Inside X68000 p234) *R1 = p188
-#define VDC_R2      ((volatile unsigned short*)0xE82600)     // video controller (Inside X68000 p210)
-#define PALETTE_REG ((volatile unsigned short*)0xE82000)     // graphic palette (Inside X68000 p218)
-
 // initialize 65536 color pallet
 static void init_graphic_palette_65536() {
-  int ofs = 0;
-  for (int i = 0x0001; i <= 0x10000; i += 0x0202) {
-    PALETTE_REG[ofs++] = (unsigned short)i;
-    PALETTE_REG[ofs++] = (unsigned short)i;
+  int32_t ofs = 0;
+  for (int32_t i = 0x0001; i <= 0x10000; i += 0x0202) {
+    PALETTE_REG[ofs++] = (uint16_t)i;
+    PALETTE_REG[ofs++] = (uint16_t)i;
   }
 }
 
 // initialize ctrc mode
-void set_extra_crtc_mode(int use_extended_graphic) {
+void set_extra_crtc_mode(int32_t use_extended_graphic) {
 
   // wait vsync
   WAIT_VDISP;

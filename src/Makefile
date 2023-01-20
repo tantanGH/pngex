@@ -33,7 +33,7 @@ CFLAGS = $(COMMON_FLAGS) -Wno-builtin-declaration-mismatch -fcall-used-d2 -fcall
 	-z-stack=32768 -D__time_t_defined -D__clock_t_defined
 
 # *.c ソースファイル
-C_SRCS = crtc.c memory.c buffer.c png.c pngex.c
+C_SRCS = crtc.c memory.c buffer.c png.c main.c
 
 # *.s ソースファイル
 ASM_SRCS = 
@@ -61,10 +61,10 @@ HLK_LINK_LIST = $(INTERMEDIATE_DIR)/_lk_list.tmp
 LIBRARY_FILE = libpngex.a
 
 # Library package file
-LIBRARY_PACKAGE_FILE = ../LBPNG071.ZIP
+LIBRARY_PACKAGE_FILE = ../LBPNG080.ZIP
 
 # Distribution package 
-PACKAGE_FILE = ../PNGEX071.ZIP
+PACKAGE_FILE = ../PNGEX080.ZIP
 
 # Document file
 DOCUMENT_FILE = PNGEX.DOC

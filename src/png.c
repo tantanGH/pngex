@@ -8,7 +8,7 @@
 #include "buffer.h"
 
 // GVRAM memory address
-#define GVRAM       ((volatile unsigned short*)0xC00000)
+#define GVRAM       ((volatile uint16_t*)0xC00000)
 
 //#define DEBUG
 
@@ -49,11 +49,11 @@ void png_init(PNG_DECODE_HANDLE* png) {
   png->rgb555_b = malloc_himem(512, png->use_high_memory);
 
   // initialize color map
-  for (int i = 0; i < 256; i++) {
-    unsigned int c = (int)(i * 32 * png->brightness / 100) >> 8;
-    png->rgb555_r[i] = (unsigned short)((c <<  6) + 1);
-    png->rgb555_g[i] = (unsigned short)((c << 11) + 1);
-    png->rgb555_b[i] = (unsigned short)((c <<  1) + 1);
+  for (int32_t i = 0; i < 256; i++) {
+    uint32_t c = (int)(i * 32 * png->brightness / 100) >> 8;
+    png->rgb555_r[i] = (uint16_t)((c <<  6) + 1);
+    png->rgb555_g[i] = (uint16_t)((c << 11) + 1);
+    png->rgb555_b[i] = (uint16_t)((c <<  1) + 1);
   }
 
 }
@@ -79,8 +79,8 @@ void png_set_header(PNG_DECODE_HANDLE* png, PNG_HEADER* png_header) {
 
   // centering offset calculation
   if (png->centering) {
-    int screen_width  = png->use_extended_graphic ? 768 : 512;
-    int screen_height = 512;
+    int32_t screen_width  = png->use_extended_graphic ? 768 : 512;
+    int32_t screen_height = 512;
     png->offset_x = ( png_header->width  <= screen_width ) ? ( screen_width  - png_header->width  ) >> 1 : 0;
     png->offset_y = ( png_header->height <= screen_width ) ? ( screen_height - png_header->height ) >> 1 : 0;
   }
@@ -131,11 +131,11 @@ void png_close(PNG_DECODE_HANDLE* png) {
 //
 //  paeth predictor for PNG filter mode 4
 //
-inline static short paeth_predictor(short a, short b, short c) {
-  short p = a + b - c;
-  short pa = p > a ? p - a : a - p;
-  short pb = p > b ? p - b : b - p;
-  short pc = p > c ? p - c : c - p;
+inline static int16_t paeth_predictor(int16_t a, int16_t b, int16_t c) {
+  int16_t p = a + b - c;
+  int16_t pa = p > a ? p - a : a - p;
+  int16_t pb = p > b ? p - b : b - p;
+  int16_t pc = p > c ? p - c : c - p;
   if (pa <= pb && pa <= pc) {
     return a;  
   } else if (pb <= pc) {
@@ -147,11 +147,11 @@ inline static short paeth_predictor(short a, short b, short c) {
 //
 //  output pixel data to gvram
 //
-static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_consumed, PNG_DECODE_HANDLE* png) {
+static void output_pixel(uint8_t* buffer, size_t buffer_size, int32_t* buffer_consumed, PNG_DECODE_HANDLE* png) {
 
-  int consumed_size = 0;
-  int bytes_per_pixel = (png->png_header.color_type == PNG_COLOR_TYPE_RGBA) ? 4 : 3;
-  unsigned char* buffer_end = buffer + buffer_size;
+  int32_t consumed_size = 0;
+  int32_t bytes_per_pixel = (png->png_header.color_type == PNG_COLOR_TYPE_RGBA) ? 4 : 3;
+  uint8_t* buffer_end = buffer + buffer_size;
   
   // cropping check
   if ((png->offset_y + png->current_y) >= png->actual_height) {
@@ -161,7 +161,7 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
   }
 
   // GVRAM entry point
-  volatile unsigned short* gvram_current = (unsigned short*)GVRAM +  
+  volatile uint16_t* gvram_current = GVRAM +  
                                     png->actual_width * (png->offset_y + png->current_y) + 
                                     png->offset_x + (png->current_x >= 0 ? png->current_x : 0);
 
@@ -186,9 +186,9 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
       }
 
       // get raw RGB data
-      short r = *buffer++;
-      short g = *buffer++;
-      short b = *buffer++;
+      int16_t r = *buffer++;
+      int16_t g = *buffer++;
+      int16_t b = *buffer++;
 
       // ignore 4th byte in RGBA mode
       if (png->png_header.color_type == PNG_COLOR_TYPE_RGBA) {
@@ -196,15 +196,15 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
       }
 
       // filtered RGB
-      short rf, gf, bf;
+      int16_t rf, gf, bf;
 
       // apply filter
       switch (png->current_filter) {
       case 1:     // sub
         {
-          short arf = (png->current_x > 0) ? png->left_rf : 0;
-          short agf = (png->current_x > 0) ? png->left_gf : 0;
-          short abf = (png->current_x > 0) ? png->left_bf : 0;
+          int16_t arf = (png->current_x > 0) ? png->left_rf : 0;
+          int16_t agf = (png->current_x > 0) ? png->left_gf : 0;
+          int16_t abf = (png->current_x > 0) ? png->left_bf : 0;
           rf = ( r + arf ) & 0xff;
           gf = ( g + agf ) & 0xff;
           bf = ( b + abf ) & 0xff;
@@ -212,9 +212,9 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
         break;
       case 2:     // up
         {
-          short brf = (png->current_y > 0) ? png->up_rf_ptr[png->current_x] : 0;
-          short bgf = (png->current_y > 0) ? png->up_gf_ptr[png->current_x] : 0;
-          short bbf = (png->current_y > 0) ? png->up_bf_ptr[png->current_x] : 0;
+          int16_t brf = (png->current_y > 0) ? png->up_rf_ptr[png->current_x] : 0;
+          int16_t bgf = (png->current_y > 0) ? png->up_gf_ptr[png->current_x] : 0;
+          int16_t bbf = (png->current_y > 0) ? png->up_bf_ptr[png->current_x] : 0;
           rf = ( r + brf ) & 0xff;
           gf = ( g + bgf ) & 0xff;
           bf = ( b + bbf ) & 0xff;
@@ -222,12 +222,12 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
         break;
       case 3:     // average
         {
-          short arf = (png->current_x > 0) ? png->left_rf : 0;
-          short agf = (png->current_x > 0) ? png->left_gf : 0;
-          short abf = (png->current_x > 0) ? png->left_bf : 0;
-          short brf = (png->current_y > 0) ? png->up_rf_ptr[png->current_x] : 0;
-          short bgf = (png->current_y > 0) ? png->up_gf_ptr[png->current_x] : 0;
-          short bbf = (png->current_y > 0) ? png->up_bf_ptr[png->current_x] : 0;
+          int16_t arf = (png->current_x > 0) ? png->left_rf : 0;
+          int16_t agf = (png->current_x > 0) ? png->left_gf : 0;
+          int16_t abf = (png->current_x > 0) ? png->left_bf : 0;
+          int16_t brf = (png->current_y > 0) ? png->up_rf_ptr[png->current_x] : 0;
+          int16_t bgf = (png->current_y > 0) ? png->up_gf_ptr[png->current_x] : 0;
+          int16_t bbf = (png->current_y > 0) ? png->up_bf_ptr[png->current_x] : 0;
           rf = ( r + ((arf + brf) >> 1)) & 0xff;
           gf = ( g + ((agf + bgf) >> 1)) & 0xff;
           bf = ( b + ((abf + bbf) >> 1)) & 0xff;
@@ -235,15 +235,15 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
         break;
       case 4:     // paeth
         {
-          short arf = (png->current_x > 0) ? png->left_rf : 0;
-          short agf = (png->current_x > 0) ? png->left_gf : 0;
-          short abf = (png->current_x > 0) ? png->left_bf : 0;
-          short brf = (png->current_y > 0) ? png->up_rf_ptr[png->current_x] : 0;
-          short bgf = (png->current_y > 0) ? png->up_gf_ptr[png->current_x] : 0;
-          short bbf = (png->current_y > 0) ? png->up_bf_ptr[png->current_x] : 0;
-          short crf = (png->current_x > 0 && png->current_y > 0) ? png->up_rf_ptr[png->current_x-1] : 0;
-          short cgf = (png->current_x > 0 && png->current_y > 0) ? png->up_gf_ptr[png->current_x-1] : 0;
-          short cbf = (png->current_x > 0 && png->current_y > 0) ? png->up_bf_ptr[png->current_x-1] : 0;
+          int16_t arf = (png->current_x > 0) ? png->left_rf : 0;
+          int16_t agf = (png->current_x > 0) ? png->left_gf : 0;
+          int16_t abf = (png->current_x > 0) ? png->left_bf : 0;
+          int16_t brf = (png->current_y > 0) ? png->up_rf_ptr[png->current_x] : 0;
+          int16_t bgf = (png->current_y > 0) ? png->up_gf_ptr[png->current_x] : 0;
+          int16_t bbf = (png->current_y > 0) ? png->up_bf_ptr[png->current_x] : 0;
+          int16_t crf = (png->current_x > 0 && png->current_y > 0) ? png->up_rf_ptr[png->current_x-1] : 0;
+          int16_t cgf = (png->current_x > 0 && png->current_y > 0) ? png->up_gf_ptr[png->current_x-1] : 0;
+          int16_t cbf = (png->current_x > 0 && png->current_y > 0) ? png->up_bf_ptr[png->current_x-1] : 0;
           rf = ( r + paeth_predictor(arf,brf,crf)) & 0xff;
           gf = ( g + paeth_predictor(agf,bgf,cgf)) & 0xff;
           bf = ( b + paeth_predictor(abf,bbf,cbf)) & 0xff;
@@ -286,22 +286,22 @@ static void output_pixel(unsigned char* buffer, int buffer_size, int* buffer_con
         png->current_x = -1;
         png->current_y++;
         if ((png->offset_y + png->current_y) >= png->actual_height) break;  // Y cropping
-        gvram_current = (unsigned short*)GVRAM + png->actual_width * (png->offset_y + png->current_y) + png->offset_x;
+        gvram_current = GVRAM + png->actual_width * (png->offset_y + png->current_y) + png->offset_x;
       }
 
     }
 
   }
 
-  *buffer_consumed = (buffer_size - (int)(buffer_end - buffer));
+  *buffer_consumed = (buffer_size - (int32_t)(buffer_end - buffer));
 }
 
 //
 //  inflate compressed data stream
 //
-static int inflate_data(BUFFER_HANDLE* input_buffer, BUFFER_HANDLE* output_buffer, z_stream* zisp, PNG_DECODE_HANDLE* png) {
+static int32_t inflate_data(BUFFER_HANDLE* input_buffer, BUFFER_HANDLE* output_buffer, z_stream* zisp, PNG_DECODE_HANDLE* png) {
 
-  int z_status = Z_OK;
+  int32_t z_status = Z_OK;
 
 #ifdef DEBUG
   printf("input_buffer->rofs=%d,output_buffer->wofs=%d\n",input_buffer->rofs,output_buffer->wofs);
@@ -320,8 +320,8 @@ static int inflate_data(BUFFER_HANDLE* input_buffer, BUFFER_HANDLE* output_buffe
 
   while (zisp->avail_in > 0) {
 
-    int avail_in_cur = zisp->avail_in;
-    int avail_out_cur = zisp->avail_out;
+    int32_t avail_in_cur = zisp->avail_in;
+    int32_t avail_out_cur = zisp->avail_out;
 
     // inflate
     z_status = inflate(zisp,Z_NO_FLUSH);
@@ -331,7 +331,7 @@ static int inflate_data(BUFFER_HANDLE* input_buffer, BUFFER_HANDLE* output_buffe
     if (z_status == Z_OK) {
 
       // input buffer consumed
-      int in_consumed_size = avail_in_cur - zisp->avail_in;
+      int32_t in_consumed_size = avail_in_cur - zisp->avail_in;
       input_buffer->rofs += in_consumed_size;
       if (input_buffer->rofs >= input_buffer->buffer_size) {
 #ifdef DEBUG        
@@ -341,19 +341,19 @@ static int inflate_data(BUFFER_HANDLE* input_buffer, BUFFER_HANDLE* output_buffe
       }
 
       // output buffer consumed
-      int inflated_size = avail_out_cur - zisp->avail_out;
+      int32_t inflated_size = avail_out_cur - zisp->avail_out;
       output_buffer->wofs += inflated_size;  
 
       // output pixel
 #ifdef DEBUG
       printf("output_buffer->rofs=%d\n",output_buffer->rofs);
 #endif
-      int out_consumable_size = output_buffer->wofs - output_buffer->rofs;
-      int out_consumed_size;
+      int32_t out_consumable_size = output_buffer->wofs - output_buffer->rofs;
+      int32_t out_consumed_size;
       output_pixel(output_buffer->buffer_data + output_buffer->rofs, out_consumable_size, &out_consumed_size, png);
 
       // in case we cannot consume all the inflated data, reuse it for the next output
-      int out_remain_size = out_consumable_size - out_consumed_size;
+      int32_t out_remain_size = out_consumable_size - out_consumed_size;
 #ifdef DEBUG        
     printf("output pixel done. z_status=%d,avail_in=%d,avail_out=%d,out_consumed=%d,remain=%d\n",z_status,zisp->avail_in,zisp->avail_out,out_consumed_size,out_remain_size);
 #endif
@@ -377,7 +377,7 @@ static int inflate_data(BUFFER_HANDLE* input_buffer, BUFFER_HANDLE* output_buffe
     } else if (z_status == Z_STREAM_END) {
 
       // output buffer written
-      int inflated_size = avail_out_cur - zisp->avail_out;
+      int32_t inflated_size = avail_out_cur - zisp->avail_out;
       output_buffer->wofs += inflated_size;  
 
       // input buffer consumed
@@ -390,12 +390,12 @@ static int inflate_data(BUFFER_HANDLE* input_buffer, BUFFER_HANDLE* output_buffe
 #ifdef DEBUG
       printf("output_buffer->rofs=%d\n",output_buffer->rofs);
 #endif
-      int out_consumable_size = output_buffer->wofs - output_buffer->rofs;
-      int out_consumed_size;
+      int32_t out_consumable_size = output_buffer->wofs - output_buffer->rofs;
+      int32_t out_consumed_size;
       output_pixel(output_buffer->buffer_data + output_buffer->rofs, out_consumable_size, &out_consumed_size, png);
 
       // in case we cannot consume all the inflated data, reuse it for the next output
-      int out_remain_size = out_consumable_size - out_consumed_size;
+      int32_t out_remain_size = out_consumable_size - out_consumed_size;
       if (out_remain_size > 0) {
         memcpy(output_buffer->buffer_data, output_buffer->buffer_data + out_consumed_size, out_remain_size);
         output_buffer->wofs = out_remain_size;
@@ -419,14 +419,14 @@ static int inflate_data(BUFFER_HANDLE* input_buffer, BUFFER_HANDLE* output_buffe
 //
 //  load PNG image
 //
-int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
+int32_t png_load(PNG_DECODE_HANDLE* png, const uint8_t* png_file_name) {
 
   // return code
-  int rc = -1;
+  int32_t rc = -1;
 
   // for file operation
   FILE* fp;
-  char signature[8];
+  uint8_t signature[8];
 
   // png header
   PNG_HEADER png_header;
@@ -490,8 +490,8 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
   // process PNG file chunk by chunk
   for (;;) {
 
-    int chunk_size, chunk_crc;
-    char chunk_type[5];
+    int32_t chunk_size, chunk_crc;
+    uint8_t chunk_type[5];
   
     // get chunk size from file (not buffer)
     //int chunk_size = buffer_get_uint(&input_buffer, 0);
@@ -552,7 +552,7 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
       // IDAT - data chunk, may appear several times
 
       // read chunk data into input buffer
-      int filled_size = buffer_fill(&input_buffer, chunk_size, 0);
+      int32_t filled_size = buffer_fill(&input_buffer, chunk_size, 0);
       if (filled_size < 0) {
         printf("error: buffer error. unread data were overwritten.\n");
         goto catch;
@@ -561,14 +561,14 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
         printf("reached to buffer end. cannot read all the data. (filled=%d,chunk_size=%d,rofs=%d,wofs=%d)\n",filled_size,chunk_size,input_buffer.rofs,input_buffer.wofs);
 #endif
         // consume data here
-        int z_status = inflate_data(&input_buffer, &output_buffer, &zis, png);
+        int32_t z_status = inflate_data(&input_buffer, &output_buffer, &zis, png);
         if (z_status != Z_OK && z_status != Z_STREAM_END) {
           printf("error: zlib data decompression error(%d).\n",z_status);
           goto catch;
         }
 
         // back to buffer top and refill
-        int refilled_size = buffer_fill(&input_buffer, chunk_size - filled_size, 1);
+        int32_t refilled_size = buffer_fill(&input_buffer, chunk_size - filled_size, 1);
         if (refilled_size < 0) {
           printf("error: buffer error. unread data were overwritten.\n");
           goto catch;          
@@ -579,7 +579,7 @@ int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name) {
       }
 
       // read crc from file (not from buffer)
-      fread((char*)(&chunk_crc), 1, 4, fp);
+      fread((uint8_t*)(&chunk_crc), 1, 4, fp);
 
       // no crc check
 
@@ -630,14 +630,14 @@ catch:
 //
 //  describe PNG file information
 //
-int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name) {
+int32_t png_describe(PNG_DECODE_HANDLE* png, const uint8_t* png_file_name) {
 
   // return code
-  int rc = -1;
+  int32_t rc = -1;
 
   // for file operation
   FILE* fp;
-  char signature[8];
+  uint8_t signature[8];
 
   // png header
   PNG_HEADER png_header;
@@ -675,13 +675,13 @@ int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name) {
   // process PNG file chunk by chunk
   for (;;) {
  
-    char chunk_type[5];
+    uint8_t chunk_type[5];
  
     // get chunk size from buffer
-    int chunk_size = buffer_get_uint(&input_buffer, 0);
+    int32_t chunk_size = buffer_get_uint(&input_buffer, 0);
 
     // read next 4 bytes as chuck type
-    buffer_read(&input_buffer, (unsigned char*)&chunk_type, 4);
+    buffer_read(&input_buffer, (uint8_t*)&chunk_type, 4);
     chunk_type[4] = '\0';
 
     if (strcmp("IHDR",chunk_type) == 0) {
@@ -698,7 +698,7 @@ int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name) {
       png_header.filter_method      = buffer_get_uchar(&input_buffer);
       png_header.interlace_method   = buffer_get_uchar(&input_buffer);
 
-      FILES(&inf,(unsigned char*)png_file_name,0x23);
+      FILES(&inf,(uint8_t*)png_file_name,0x23);
       printf("--\n");
       printf(" file name: %s\n",png_file_name);
       printf(" file size: %d\n",inf.filelen);

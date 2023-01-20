@@ -1,59 +1,61 @@
 #ifndef __H_PNG__
 #define __H_PNG__
 
+#include <stdint.h>
+
 // PNG color type
 #define PNG_COLOR_TYPE_RGB  2
 #define PNG_COLOR_TYPE_RGBA 6
 
 // PNG header structure
 typedef struct {
-  int width;
-  int height;
-  char bit_depth;
-  char color_type;
-  char compression_method;
-  char filter_method;
-  char interlace_method;
+  int32_t width;
+  int32_t height;
+  uint8_t bit_depth;
+  uint8_t color_type;
+  uint8_t compression_method;
+  uint8_t filter_method;
+  uint8_t interlace_method;
 } PNG_HEADER;
 
 // PNG decode engine status handle
 typedef struct {
 
   // input parameters
-  int input_buffer_size;
-  int output_buffer_size;
-  int use_high_memory;
-  int use_extended_graphic;
-  int brightness;
-  int centering;
-  int offset_x;
-  int offset_y;
-  int no_signature_check;
+  int32_t input_buffer_size;
+  int32_t output_buffer_size;
+  int32_t use_high_memory;
+  int32_t use_extended_graphic;
+  int32_t brightness;
+  int32_t centering;
+  int32_t offset_x;
+  int32_t offset_y;
+  int32_t no_signature_check;
 
   // png header copy
   PNG_HEADER png_header;
 
   // actual screen size (determined by extended graphic use)
-  int actual_width;
-  int actual_height;
+  int32_t actual_width;
+  int32_t actual_height;
 
   // current decode state
-  int current_x;
-  int current_y;
-  int current_filter;
+  int32_t current_x;
+  int32_t current_y;
+  int32_t current_filter;
 
   // for filter use
-  unsigned char left_rf;
-  unsigned char left_gf;
-  unsigned char left_bf;
-  unsigned char* up_rf_ptr;
-  unsigned char* up_gf_ptr;
-  unsigned char* up_bf_ptr;  
+  uint8_t left_rf;
+  uint8_t left_gf;
+  uint8_t left_bf;
+  uint8_t* up_rf_ptr;
+  uint8_t* up_gf_ptr;
+  uint8_t* up_bf_ptr;  
 
   // RGB888 to RGB555 color map
-  unsigned short* rgb555_r;
-  unsigned short* rgb555_g;
-  unsigned short* rgb555_b;
+  uint16_t* rgb555_r;
+  uint16_t* rgb555_g;
+  uint16_t* rgb555_b;
 
 } PNG_DECODE_HANDLE;
 
@@ -61,7 +63,7 @@ typedef struct {
 void png_init(PNG_DECODE_HANDLE* png);
 void png_set_header(PNG_DECODE_HANDLE* png, PNG_HEADER* png_header);
 void png_close(PNG_DECODE_HANDLE* png);
-int png_load(PNG_DECODE_HANDLE* png, const char* png_file_name );
-int png_describe(PNG_DECODE_HANDLE* png, const char* png_file_name);
+int32_t png_load(PNG_DECODE_HANDLE* png, const uint8_t* png_file_name );
+int32_t png_describe(PNG_DECODE_HANDLE* png, const uint8_t* png_file_name);
 
 #endif
