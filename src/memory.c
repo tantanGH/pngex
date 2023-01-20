@@ -17,7 +17,7 @@ inline static void* __malloc_himem(size_t size) {
 
     TRAP15(&in_regs, &out_regs);
 
-    int rc = out_regs.d0;
+    int32_t rc = out_regs.d0;
 
     return (rc == 0) ? (void*)out_regs.a1 : NULL;
 }
@@ -38,23 +38,23 @@ inline static void __free_himem(void* ptr) {
 //  main memory operations using DOSCALL (with malloc, we cannot allocate more than 64k, why?)
 //
 inline static void* __malloc_mainmem(size_t size) {
-  int addr = MALLOC(size);
-  return (addr >= 0x81000000) ? NULL : (char*)addr;
+  uint32_t addr = MALLOC(size);
+  return (addr >= 0x81000000) ? NULL : (void*)addr;
 }
 
 inline static void __free_mainmem(void* ptr) {
   if (ptr == NULL) return;
-  MFREE((int)ptr);
+  MFREE((uint32_t)ptr);
 }
 
 //
 //  generic memory operations
 //
-void* malloc_himem(size_t size, int use_high_memory) {
+void* malloc_himem(size_t size, int32_t use_high_memory) {
     return use_high_memory ? __malloc_himem(size) : __malloc_mainmem(size);
 }
 
-void free_himem(void* ptr, int use_high_memory) {
+void free_himem(void* ptr, int32_t use_high_memory) {
     if (use_high_memory) {
         __free_himem(ptr);
     } else {

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <jstring.h>
 #include <time.h>
@@ -15,11 +16,11 @@
 //  show help messages
 //
 static void show_help_message() {
-  printf("PNGEX - PNG image loader with XEiJ graphic extension support version " VERSION " by tantan 2022,2023\n");
+  printf("PNGEX - PNG image loader with XEiJ graphic extension support version " VERSION " by tantan 2022-2023\n");
   printf("usage: pngex.x [options] <image1.png> [<image2.png> ...]\n");
   printf("options:\n");
   printf("   -c ... clear graphic screen\n");
-  printf("   -e ... use extended graphic mode for XEiJ\n");
+  printf("   -e ... use extended graphic mode (only for XEiJ)\n");
   printf("   -h ... show this help message\n");
   printf("   -i ... show file information\n");
   printf("   -n ... image centering\n");
@@ -33,19 +34,19 @@ static void show_help_message() {
 //
 //  process files
 //
-static int process_files(int argc, char* argv[], int information_mode, int input_file_count, int random_mode, int clear_screen, int key_wait, PNG_DECODE_HANDLE* png) {
+static int32_t process_files(int32_t argc, uint8_t* argv[], int32_t information_mode, int32_t input_file_count, int32_t random_mode, int32_t clear_screen, int32_t key_wait, PNG_DECODE_HANDLE* png) {
 
-  int file_index = 0;
-  int random_index = 0;
+  int32_t file_index = 0;
+  int32_t random_index = 0;
 
   if (random_mode) {
-    srand((unsigned int)time(NULL));
+    srand((uint32_t)time(NULL));
     random_index = rand() % input_file_count;
   }
 
-  for (int i = 1; i < argc; i++) {
+  for (int32_t i = 1; i < argc; i++) {
 
-    char* file_name = argv[i];
+    uint8_t* file_name = argv[i];
 
     if (file_name[0] == '-') continue;
 
@@ -60,16 +61,21 @@ static int process_files(int argc, char* argv[], int information_mode, int input
           png_load(png, file_name);
         }
         if (key_wait) {
-          getchar();
+          while (B_KEYSNS() == 0) {
+            ;
+          }
+          while (B_KEYSNS() != 0) {
+            B_KEYINP();
+          }
         }
 
       } else {
 
         // expand wild card
         struct FILBUF inf;
-        char path_name[256];
-        char* c;
-        int rc, wild_file_index = 0, wild_random_index = 0;
+        uint8_t path_name[256];
+        uint8_t* c;
+        int32_t rc, wild_file_index = 0, wild_random_index = 0;
 
         strcpy(path_name,file_name);
         if ((c = jstrrchr(path_name,'\\')) != NULL ||
@@ -87,19 +93,19 @@ static int process_files(int argc, char* argv[], int information_mode, int input
         }
 
         if (random_mode) {
-          int wild_file_count = 0;
+          int32_t wild_file_count = 0;
           while (rc == 0) {
             wild_file_count++;
             rc = NFILES(&inf);
           }
-          srand((unsigned int)time(NULL));
+          srand((uint32_t)time(NULL));
           wild_random_index = rand() % wild_file_count;
           rc = FILES(&inf,file_name,0x20);
         }
 
         while (rc == 0) {
           if (!random_mode || wild_file_index == wild_random_index) {
-            char this_name[256];
+            static uint8_t this_name[256];
             strcpy(this_name,path_name);
             strcat(this_name,inf.name);
 
@@ -109,7 +115,12 @@ static int process_files(int argc, char* argv[], int information_mode, int input
               png_load(png, this_name);
             }
             if (key_wait) {
-              getchar();
+              while (B_KEYSNS() == 0) {
+                ;
+              }
+              while (B_KEYSNS() != 0) {
+                B_KEYINP();
+              }
             }
           }
           wild_file_index++;
@@ -124,21 +135,21 @@ static int process_files(int argc, char* argv[], int information_mode, int input
 //
 //  main
 //
-int main(int argc, char* argv[]) {
+int32_t main(int32_t argc, uint8_t* argv[]) {
 
-  int rc = 0;
+  int32_t rc = 0;
 
   PNG_DECODE_HANDLE png = { 0 };
 
-  int information_mode = 0;
-  int clear_screen = 0;
-  int key_wait = 0;
-  int random_mode = 0;
+  int32_t information_mode = 0;
+  int32_t clear_screen = 0;
+  int32_t key_wait = 0;
+  int32_t random_mode = 0;
 
-  int buffer_memory_size_factor = 4;
+  int32_t buffer_memory_size_factor = 4;
 
-  int input_file_count = 0;
-  int func_key_display_mode = 0;
+  int32_t input_file_count = 0;
+  int32_t func_key_display_mode = 0;
  
   if (argc <= 1) {
     show_help_message();
@@ -148,7 +159,7 @@ int main(int argc, char* argv[]) {
   // run in supervisor mode
   B_SUPER(0);
 
-  for (int i = 1; i < argc; i++) {
+  for (int32_t i = 1; i < argc; i++) {
     if (argv[i][0] == '-') {
       if (argv[i][1] == 'e') {
         png.use_extended_graphic = 1;
@@ -204,7 +215,7 @@ int main(int argc, char* argv[]) {
   if (!information_mode) {
 
     // check current graphic use
-    int usage = TGUSEMD(0,-1);
+    int32_t usage = TGUSEMD(0,-1);
     if (usage == 1 || usage == 2) {
       printf("error: graphic vram is used by other applications.\n");
       goto catch;
@@ -237,11 +248,22 @@ int main(int argc, char* argv[]) {
 
     // resume function key display mode
     C_FNKMOD(func_key_display_mode);
+ 
+    // flush key buffer
+    while (B_KEYSNS() != 0) {
+      B_KEYINP();
+    }
 
   }
 
 catch:
+  // close png object
   png_close(&png);
+
+  // flush key buffer
+  while (B_KEYSNS() != 0) {
+    B_KEYINP();
+  }
 
 quit:
   return rc;

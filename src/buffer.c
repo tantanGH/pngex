@@ -6,7 +6,7 @@
 //
 //  open buffer
 //
-int buffer_open(BUFFER_HANDLE* buf, FILE* fp) {
+int32_t buffer_open(BUFFER_HANDLE* buf, FILE* fp) {
 
   buf->fp = fp;     // if fp is NULL, we use this instance as memory only buffer
   buf->rofs = 0;
@@ -29,9 +29,9 @@ void buffer_close(BUFFER_HANDLE* buf) {
 //
 //  ring buffer operations (fill new data with file)
 //
-int buffer_fill(BUFFER_HANDLE* buf, int len, int return_to_top) {
+int32_t buffer_fill(BUFFER_HANDLE* buf, size_t len, int32_t return_to_top) {
 
-  int filled_size = 0;
+  int32_t filled_size = 0;
 
   if (len < 0 ) {
     len = buf->buffer_size - buf->wofs;
@@ -58,12 +58,12 @@ int buffer_fill(BUFFER_HANDLE* buf, int len, int return_to_top) {
     }
   } else {
     // we can append some bytes to the buffer
-    int available = buf->buffer_size - buf->wofs;
+    int32_t available = buf->buffer_size - buf->wofs;
     filled_size = fread(buf->buffer_data + buf->wofs, 1, available, buf->fp);
     buf->wofs += filled_size;
     if (return_to_top) {
       // if return_to_top flas is yes, back to the top and fill      
-      int filled_size2 = fread(buf->buffer_data + 0, 1, len - available, buf->fp);
+      int32_t filled_size2 = fread(buf->buffer_data + 0, 1, len - available, buf->fp);
       filled_size += filled_size2;
       buf->wofs = filled_size2;
       if (buf->rofs > 0 && buf->wofs > buf->rofs) {    // unread data were overwritten?
@@ -78,9 +78,9 @@ int buffer_fill(BUFFER_HANDLE* buf, int len, int return_to_top) {
 //
 //  ring buffer operations (read 1 byte)
 //
-unsigned char buffer_get_uchar(BUFFER_HANDLE* buf) {
+uint8_t buffer_get_uchar(BUFFER_HANDLE* buf) {
 
-  unsigned char uc;
+  uint8_t uc;
   
   if (buf->rofs < buf->buffer_size) {
     // we can read 1 byte from the buffer
@@ -97,9 +97,9 @@ unsigned char buffer_get_uchar(BUFFER_HANDLE* buf) {
 //
 //  ring buffer operations (read 2 bytes)
 //
-unsigned short buffer_get_ushort(BUFFER_HANDLE* buf, int little_endian) {
+uint16_t buffer_get_ushort(BUFFER_HANDLE* buf, int32_t little_endian) {
 
-  unsigned short us;
+  uint16_t us;
 
   if (buf->rofs < ( buf->buffer_size - 1)) {
     // we can read 2 bytes from the buffer
@@ -125,9 +125,9 @@ unsigned short buffer_get_ushort(BUFFER_HANDLE* buf, int little_endian) {
 //
 //  ring buffer operations (read 4 bytes)
 //
-unsigned int buffer_get_uint(BUFFER_HANDLE* buf, int little_endian) {
+uint32_t buffer_get_uint(BUFFER_HANDLE* buf, int32_t little_endian) {
 
-  unsigned short us;
+  uint16_t us;
 
   if (buf->rofs < ( buf->buffer_size - 3)) {
     // we can read 4 bytes from the buffer
@@ -162,7 +162,7 @@ unsigned int buffer_get_uint(BUFFER_HANDLE* buf, int little_endian) {
 //
 //  ring buffer operations (read multiple bytes)
 //
-void buffer_read(BUFFER_HANDLE* buf, unsigned char* dest_ptr, int len) {
+void buffer_read(BUFFER_HANDLE* buf, uint8_t* dest_ptr, size_t len) {
 
   if ((buf->rofs + len) <= buf->buffer_size) {
     // we can read all bytes from the buffer
@@ -185,7 +185,7 @@ void buffer_read(BUFFER_HANDLE* buf, unsigned char* dest_ptr, int len) {
 //
 //  ring buffer operations (write multiple bytes)
 //
-void buffer_write(BUFFER_HANDLE* buf, unsigned char* src_ptr, int len) {
+void buffer_write(BUFFER_HANDLE* buf, uint8_t* src_ptr, size_t len) {
 
   if ((buf->wofs + len) <= buf->buffer_size) {
     // we can write all bytes to the buffer
@@ -208,7 +208,7 @@ void buffer_write(BUFFER_HANDLE* buf, unsigned char* src_ptr, int len) {
 //
 //  ring buffer operations (just skip bytes)
 //
-void buffer_skip(BUFFER_HANDLE* buf, int len) {
+void buffer_skip(BUFFER_HANDLE* buf, size_t len) {
 
   if ((buf->rofs + len) <= buf->buffer_size) {
     // we can skip all bytes from the buffer
