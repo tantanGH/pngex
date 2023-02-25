@@ -35,27 +35,30 @@ X680x0用のPNG画像ローダです。[XEiJ](https://stdkmd.net/xeij/)の[拡�
 
 引数をつけずに実行するか、`-h` オプションをつけて実行するとヘルプメッセージが表示されます。
 
-    PNGEX - PNG image loader with XEiJ graphic extension support version 0.1.0 by tantan 2022
+    PNGEX - PNG image loader for X680x0 version 0.x.x by tantan
     usage: pngex.x [options] <image1.png> [<image2.png> ...]
     options:
        -c ... clear graphic screen
-       -e ... use extended graphic mode for XEiJ (1024x1024x65536)
-       -h ... show this help message
-       -i ... show file information
        -n ... image centering
        -k ... wait key input
-       -u ... use high memory for buffers (set -b32 automatically)
        -v<n> ... brightness (0-100)
-       -z ... show only one image randomly
+       -e ... use extended graphic mode for XEiJ (1024x1024x65536)
+       -u ... use high memory for buffers (set -b32 automatically)
        -b<n> ... buffer memory size factor[1-32] (default:8)
+       -z ... show only one image randomly
+       -i ... show file information
+       -h ... show this help message
 
 XEiJの拡張グラフィックモードを使って768x512画面全体に32768色の画像を表示するには必ず `-e` オプションを指定してください。
 
 ファイル名にはワイルドカードも使用できます。
 
 ---
+
 ### 変更履歴
 
+- version 0.8.5 (2023.02.26) ... ハイメモリドライバの有無をチェックするようにした EXモード時の画面クリアが正常に動くようにした
+- version 0.8.0 (2023.01.20) ... リファクタリング
 - version 0.7.1 (2023.01.05) ... リファクタリング
 - version 0.6.2 (2023.01.04) ... キー待ちが無効になっていたバグを修正
 - version 0.6.0 (2023.01.03) ... リファクタリング、コード整理

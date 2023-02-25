@@ -2,10 +2,9 @@
 #include <string.h>
 #include <doslib.h>
 #include <zlib.h>
-
-#include "png.h"
-#include "memory.h"
+#include "himem.h"
 #include "buffer.h"
+#include "png.h"
 
 // GVRAM memory address
 #define GVRAM       ((volatile uint16_t*)0xC00000)
@@ -44,16 +43,16 @@ void png_init(PNG_DECODE_HANDLE* png) {
   png->up_bf_ptr = NULL;
 
   // allocate color map table memory
-  png->rgb555_r = malloc_himem(512, png->use_high_memory);
-  png->rgb555_g = malloc_himem(512, png->use_high_memory);
-  png->rgb555_b = malloc_himem(512, png->use_high_memory);
+  png->rgb555_r = himem_malloc(256 * sizeof(uint16_t), png->use_high_memory);
+  png->rgb555_g = himem_malloc(256 * sizeof(uint16_t), png->use_high_memory);
+  png->rgb555_b = himem_malloc(256 * sizeof(uint16_t), png->use_high_memory);
 
   // initialize color map
   for (int32_t i = 0; i < 256; i++) {
     uint32_t c = (int)(i * 32 * png->brightness / 100) >> 8;
-    png->rgb555_r[i] = (uint16_t)((c <<  6) + 1);
-    png->rgb555_g[i] = (uint16_t)((c << 11) + 1);
-    png->rgb555_b[i] = (uint16_t)((c <<  1) + 1);
+    png->rgb555_r[i] = ((c <<  6) + 1) & 0xffff;
+    png->rgb555_g[i] = ((c << 11) + 1) & 0xffff;
+    png->rgb555_b[i] = ((c <<  1) + 1) & 0xffff;
   }
 
 }
@@ -73,9 +72,9 @@ void png_set_header(PNG_DECODE_HANDLE* png, PNG_HEADER* png_header) {
   png->png_header.interlace_method   = png_header->interlace_method;
 
   // allocate buffer memory for upper scanline filtering
-  png->up_rf_ptr = malloc_himem(png_header->width, png->use_high_memory);
-  png->up_gf_ptr = malloc_himem(png_header->width, png->use_high_memory);
-  png->up_bf_ptr = malloc_himem(png_header->width, png->use_high_memory);
+  png->up_rf_ptr = himem_malloc(png_header->width, png->use_high_memory);
+  png->up_gf_ptr = himem_malloc(png_header->width, png->use_high_memory);
+  png->up_bf_ptr = himem_malloc(png_header->width, png->use_high_memory);
 
   // centering offset calculation
   if (png->centering) {
@@ -96,33 +95,33 @@ void png_close(PNG_DECODE_HANDLE* png) {
 
   // reclaim color map memory
   if (png->rgb555_r != NULL) {
-    free_himem(png->rgb555_r, png->use_high_memory);
+    himem_free(png->rgb555_r, png->use_high_memory);
     png->rgb555_r = NULL;
   }
 
   if (png->rgb555_g != NULL) {
-    free_himem(png->rgb555_g, png->use_high_memory);
+    himem_free(png->rgb555_g, png->use_high_memory);
     png->rgb555_g = NULL;
   }
 
   if (png->rgb555_b != NULL) {
-    free_himem(png->rgb555_b, png->use_high_memory);
+    himem_free(png->rgb555_b, png->use_high_memory);
     png->rgb555_b = NULL;
   }
 
   // reclaim filter buffer memory
   if (png->up_rf_ptr != NULL) {
-    free_himem(png->up_rf_ptr, png->use_high_memory);
+    himem_free(png->up_rf_ptr, png->use_high_memory);
     png->up_rf_ptr = NULL;
   }
 
   if (png->up_gf_ptr != NULL) {
-    free_himem(png->up_gf_ptr, png->use_high_memory);
+    himem_free(png->up_gf_ptr, png->use_high_memory);
     png->up_gf_ptr = NULL;
   }
 
   if (png->up_bf_ptr != NULL) {
-    free_himem(png->up_bf_ptr, png->use_high_memory);
+    himem_free(png->up_bf_ptr, png->use_high_memory);
     png->up_bf_ptr = NULL;
   }
 

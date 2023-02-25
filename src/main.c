@@ -7,8 +7,8 @@
 #include <doslib.h>
 #include <iocslib.h>
 #include <zlib.h>
-
 #include "crtc.h"
+#include "himem.h"
 #include "png.h"
 #include "pngex.h"
 
@@ -16,19 +16,19 @@
 //  show help messages
 //
 static void show_help_message() {
-  printf("PNGEX - PNG image loader with XEiJ graphic extension support version " VERSION " by tantan 2022-2023\n");
+  printf("PNGEX - PNG image loader for X680x0 version " VERSION " by tantan\n");
   printf("usage: pngex.x [options] <image1.png> [<image2.png> ...]\n");
   printf("options:\n");
   printf("   -c ... clear graphic screen\n");
-  printf("   -e ... use extended graphic mode (only for XEiJ)\n");
-  printf("   -h ... show this help message\n");
-  printf("   -i ... show file information\n");
   printf("   -n ... image centering\n");
   printf("   -k ... wait key input\n");
-  printf("   -u ... use high memory for buffers\n");
   printf("   -v<n> ... brightness (0-100)\n");
-  printf("   -z ... show only one image randomly\n");
+  printf("   -e ... use extended graphic mode (only for XEiJ)\n");
+  printf("   -u ... use 060turbo/TS-6BE16 high memory for buffers\n");
   printf("   -b<n> ... buffer memory size factor[1-32] (default:8)\n");
+  printf("   -z ... show only one image randomly\n");
+  printf("   -i ... show file information\n");
+  printf("   -h ... show this help message\n");
 }
 
 //
@@ -166,6 +166,11 @@ int32_t main(int32_t argc, uint8_t* argv[]) {
       } else if (argv[i][1] == 'n') {
         png.centering = 1;
       } else if (argv[i][1] == 'u') {
+        if (!himem_isavailable()) {
+          printf("error: high memory driver is not installed.\n");
+          rc = 1;
+          goto quit;
+        }
         png.use_high_memory = 1;
       } else if (argv[i][1] == 'v') {
         png.brightness = atoi(argv[i]+2);
@@ -225,10 +230,15 @@ int32_t main(int32_t argc, uint8_t* argv[]) {
     if (clear_screen) {
       G_CLR_ON();
     }
- 
+
     // initialize crtc and pallet
     set_extra_crtc_mode(png.use_extended_graphic);
- 
+    if (png.use_extended_graphic && clear_screen) {
+      // manual erase
+      struct FILLPTR fillptr = { 0, 0, 1023, 1023, 0 };
+      FILL(&fillptr);      
+    }
+
     // cursor display off
     C_CUROFF();
 
