@@ -30,13 +30,16 @@ INCLUDE_FLAGS = -I${XDEV68K_DIR}/include/xc -I${XDEV68K_DIR}/include/xdev68k -I$
 COMMON_FLAGS = -m68000 -Os $(INCLUDE_FLAGS)
 CFLAGS = $(COMMON_FLAGS) -Wno-builtin-declaration-mismatch -fcall-used-d2 -fcall-used-a2 \
     -finput-charset=cp932 -fexec-charset=cp932 -fverbose-asm \
-	-z-stack=32768 -D__time_t_defined -D__clock_t_defined
+		-z-stack=32768 -D__time_t_defined -D__clock_t_defined
 
 # *.c ソースファイル
-C_SRCS = crtc.c memory.c buffer.c png.c main.c
+C_SRCS = crtc.c himem.c buffer.c png.c main.c
 
 # *.s ソースファイル
 ASM_SRCS = 
+
+# *.h header files
+HEADER_SRCS = keyboard.h crtc.h himem.h buffer.h png.h pngex.h
 
 # リンク対象のライブラリファイル
 LIBS =\
@@ -57,14 +60,8 @@ OBJS =	$(addprefix $(INTERMEDIATE_DIR)/,$(patsubst %.c,%.o,$(C_SRCS))) \
 # HLK に入力するリンクリスト
 HLK_LINK_LIST = $(INTERMEDIATE_DIR)/_lk_list.tmp
 
-# Library file
-LIBRARY_FILE = libpngex.a
-
-# Library package file
-LIBRARY_PACKAGE_FILE = ../LBPNG080.ZIP
-
 # Distribution package 
-PACKAGE_FILE = ../PNGEX080.ZIP
+PACKAGE_FILE = ../PNGEX085.ZIP
 
 # Document file
 DOCUMENT_FILE = PNGEX.DOC
@@ -94,7 +91,7 @@ ${INTERMEDIATE_DIR}/$(TARGET_FILE) : $(OBJS)
 	$(HLK) -i $(HLK_LINK_LIST) -o ${INTERMEDIATE_DIR}/$(TARGET_FILE)
 
 # *.c ソースのコンパイル
-$(INTERMEDIATE_DIR)/%.o : %.c Makefile
+$(INTERMEDIATE_DIR)/%.o : %.c $(HEADER_SRCS) Makefile
 	mkdir -p $(INTERMEDIATE_DIR)
 	$(CC) -S $(CFLAGS) -o $(INTERMEDIATE_DIR)/$*.m68k-gas.s $<
 	$(GAS2HAS) -i $(INTERMEDIATE_DIR)/$*.m68k-gas.s -o $(INTERMEDIATE_DIR)/$*.s
@@ -108,7 +105,3 @@ $(INTERMEDIATE_DIR)/%.o : %.s Makefile
 
 package:
 	zip -j ${PACKAGE_FILE} ${INTERMEDIATE_DIR}/${TARGET_FILE} ${DOCUMENT_FILE} 
-
-library:
-	cd $(INTERMEDIATE_DIR); $(AR) $(LIBRARY_FILE) png.o; cd ..
-	zip -j $(LIBRARY_PACKAGE_FILE) $(INTERMEDIATE_DIR)/$(LIBRARY_FILE) png.h

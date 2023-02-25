@@ -7,7 +7,7 @@
 // ringer buffer handle
 typedef struct {
   int32_t buffer_size;
-  int32_t use_high_memory;
+//  int32_t use_high_memory;
   FILE* fp;
   int32_t rofs;
   int32_t wofs;
