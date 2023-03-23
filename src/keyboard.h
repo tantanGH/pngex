@@ -68,7 +68,7 @@
 #define KEY_SCAN_CODE_Q       ( KEY_GRP_Q      * 8 + KEY_BIT_Q      )
 #define KEY_SCAN_CODE_S       ( KEY_GRP_S      * 8 + KEY_BIT_S      )
 #define KEY_SCAN_CODE_V       ( KEY_GRP_V      * 8 + KEY_BIT_V      )
-#define KEY_SCAN_CODE_X       ( KEY_GRP_X      * 8 + KEY_BIT_E      )
+#define KEY_SCAN_CODE_X       ( KEY_GRP_X      * 8 + KEY_BIT_X      )
 
 #define KEY_SNS_ESC     (1 << KEY_BIT_ESC    )
 #define KEY_SNS_CR      (1 << KEY_BIT_CR     )

@@ -14,19 +14,30 @@
 //
 //  initialize PNG decode handle
 //
-void png_init(PNG_DECODE_HANDLE* png) {
+void png_init(PNG_DECODE_HANDLE* png, int16_t buffer_size, int16_t brightness, int16_t extended_graphic) {
 
-  if (png->brightness == 0) {
-    png->brightness = 100;
-  }
+  // input buffer = 64KB * factor
+  png->input_buffer_size = 65536 * buffer_size;
+
+  // output (inflate) buffer = 128KB * factor - should be LCM(3,4)*n to store RGB or RGBA tuple
+  png->output_buffer_size = 131072 * buffer_size;
+
+  png->brightness = brightness;
+  png->extended_graphic = extended_graphic;
+  png->use_high_memory = 0;
+  png->centering = 1;
+  png->offset_x = 0;
+  png->offset_y = 0;
 
   // actual width and height
-  if (png->use_extended_graphic) {
-    png->actual_width = 1024;
-    png->actual_height = 1024;
+  if (png->extended_graphic) {
+    png->actual_width = 768;
+    png->actual_height = 512;
+    png->pitch = 1024;
   } else {
     png->actual_width = 512;
     png->actual_height = 512;
+    png->pitch = 512;
   }
 
   // for PNG decode
@@ -53,35 +64,6 @@ void png_init(PNG_DECODE_HANDLE* png) {
     png->rgb555_r[i] = ((c <<  6) + 1) & 0xffff;
     png->rgb555_g[i] = ((c << 11) + 1) & 0xffff;
     png->rgb555_b[i] = ((c <<  1) + 1) & 0xffff;
-  }
-
-}
-
-//
-//  set PNG header (this can be done after we decode IHDR chunk)
-//
-void png_set_header(PNG_DECODE_HANDLE* png, PNG_HEADER* png_header) {
-
-  // copy header content
-  png->png_header.width              = png_header->width;
-  png->png_header.height             = png_header->height;
-  png->png_header.bit_depth          = png_header->bit_depth;
-  png->png_header.color_type         = png_header->color_type;
-  png->png_header.compression_method = png_header->compression_method;
-  png->png_header.filter_method      = png_header->filter_method;
-  png->png_header.interlace_method   = png_header->interlace_method;
-
-  // allocate buffer memory for upper scanline filtering
-  png->up_rf_ptr = himem_malloc(png_header->width, png->use_high_memory);
-  png->up_gf_ptr = himem_malloc(png_header->width, png->use_high_memory);
-  png->up_bf_ptr = himem_malloc(png_header->width, png->use_high_memory);
-
-  // centering offset calculation
-  if (png->centering) {
-    int32_t screen_width  = png->use_extended_graphic ? 768 : 512;
-    int32_t screen_height = 512;
-    png->offset_x = ( png_header->width  <= screen_width ) ? ( screen_width  - png_header->width  ) >> 1 : 0;
-    png->offset_y = ( png_header->height <= screen_width ) ? ( screen_height - png_header->height ) >> 1 : 0;
   }
 
 }
@@ -128,6 +110,37 @@ void png_close(PNG_DECODE_HANDLE* png) {
 }
 
 //
+//  set PNG header (this can be done after we decode IHDR chunk)
+//
+void png_set_header(PNG_DECODE_HANDLE* png, PNG_HEADER* png_header) {
+
+  // copy header content
+  png->png_header.width              = png_header->width;
+  png->png_header.height             = png_header->height;
+  png->png_header.bit_depth          = png_header->bit_depth;
+  png->png_header.color_type         = png_header->color_type;
+  png->png_header.compression_method = png_header->compression_method;
+  png->png_header.filter_method      = png_header->filter_method;
+  png->png_header.interlace_method   = png_header->interlace_method;
+
+  // allocate buffer memory for upper scanline filtering
+  png->up_rf_ptr = himem_malloc(png_header->width, png->use_high_memory);
+  png->up_gf_ptr = himem_malloc(png_header->width, png->use_high_memory);
+  png->up_bf_ptr = himem_malloc(png_header->width, png->use_high_memory);
+
+  // centering offset calculation
+  if (png->centering) {
+    int32_t screen_width  = png->extended_graphic ? 768 : 512;
+    int32_t screen_height = 512;
+    png->offset_x = ( png_header->width  <= screen_width ) ? ( screen_width  - png_header->width  ) >> 1 : 0;
+    png->offset_y = ( png_header->height <= screen_width ) ? ( screen_height - png_header->height ) >> 1 : 0;
+//    png->offset_x = ( screen_width  - png_header->width  ) / 2;
+//    png->offset_y = ( screen_height - png_header->height ) / 2;
+  }
+
+}
+
+//
 //  paeth predictor for PNG filter mode 4
 //
 inline static int16_t paeth_predictor(int16_t a, int16_t b, int16_t c) {
@@ -153,15 +166,15 @@ static void output_pixel(uint8_t* buffer, size_t buffer_size, int32_t* buffer_co
   uint8_t* buffer_end = buffer + buffer_size;
   
   // cropping check
-  if ((png->offset_y + png->current_y) >= png->actual_height) {
+  int32_t cy = png->offset_y + png->current_y;
+  if (cy < 0 || cy >= png->actual_height) {
     // no need to output any pixels
     *buffer_consumed = buffer_size;     // just consumed all
     return;
   }
 
   // GVRAM entry point
-  volatile uint16_t* gvram_current = GVRAM +  
-                                    png->actual_width * (png->offset_y + png->current_y) + 
+  volatile uint16_t* gvram_current = GVRAM + png->pitch * cy + 
                                     png->offset_x + (png->current_x >= 0 ? png->current_x : 0);
 
   while (buffer < buffer_end) {
@@ -256,7 +269,7 @@ static void output_pixel(uint8_t* buffer, size_t buffer_size, int32_t* buffer_co
 
       // write pixel data with cropping
       if ((png->offset_x + png->current_x) < png->actual_width) {
-        *gvram_current++ = png->rgb555_r[rf] | png->rgb555_g[gf] | png->rgb555_b[bf];
+        *gvram_current++ = png->rgb555_r[rf] | png->rgb555_g[gf] | png->rgb555_b[bf] | 1;
       }
 #ifdef DEBUG
       //printf("pixel: x=%d,y=%d,r=%d,g=%d,b=%d,rf=%d,gf=%d,bf=%d\n",g_current_x,g_current_y,r,g,b,rf,gf,bf);
@@ -285,7 +298,7 @@ static void output_pixel(uint8_t* buffer, size_t buffer_size, int32_t* buffer_co
         png->current_x = -1;
         png->current_y++;
         if ((png->offset_y + png->current_y) >= png->actual_height) break;  // Y cropping
-        gvram_current = GVRAM + png->actual_width * (png->offset_y + png->current_y) + png->offset_x;
+        gvram_current = GVRAM + png->pitch * (png->offset_y + png->current_y) + png->offset_x;
       }
 
     }
@@ -625,7 +638,7 @@ catch:
   // done
   return rc;
 }
-
+/*
 //
 //  describe PNG file information
 //
@@ -730,3 +743,4 @@ catch:
   // done
   return rc;
 }
+*/

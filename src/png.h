@@ -25,7 +25,7 @@ typedef struct {
   int32_t input_buffer_size;
   int32_t output_buffer_size;
   int32_t use_high_memory;
-  int32_t use_extended_graphic;
+  int32_t extended_graphic;
   int32_t brightness;
   int32_t centering;
   int32_t offset_x;
@@ -38,6 +38,7 @@ typedef struct {
   // actual screen size (determined by extended graphic use)
   int32_t actual_width;
   int32_t actual_height;
+  int32_t pitch;
 
   // current decode state
   int32_t current_x;
@@ -60,10 +61,10 @@ typedef struct {
 } PNG_DECODE_HANDLE;
 
 // prototype declarations
-void png_init(PNG_DECODE_HANDLE* png);
+void png_init(PNG_DECODE_HANDLE* png, int16_t buffer_size, int16_t brightness, int16_t extended_graphic);
 void png_set_header(PNG_DECODE_HANDLE* png, PNG_HEADER* png_header);
 void png_close(PNG_DECODE_HANDLE* png);
 int32_t png_load(PNG_DECODE_HANDLE* png, const uint8_t* png_file_name );
-int32_t png_describe(PNG_DECODE_HANDLE* png, const uint8_t* png_file_name);
+//int32_t png_describe(PNG_DECODE_HANDLE* png, const uint8_t* png_file_name);
 
 #endif

@@ -61,7 +61,7 @@ OBJS =	$(addprefix $(INTERMEDIATE_DIR)/,$(patsubst %.c,%.o,$(C_SRCS))) \
 HLK_LINK_LIST = $(INTERMEDIATE_DIR)/_lk_list.tmp
 
 # Distribution package 
-PACKAGE_FILE = ../PNGEX085.ZIP
+PACKAGE_FILE = ../PNGEX090.ZIP
 
 # Document file
 DOCUMENT_FILE = PNGEX.DOC
