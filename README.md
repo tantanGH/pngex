@@ -6,6 +6,8 @@ X680x0用のシンプルなPNG画像ローダです。[XEiJ](https://stdkmd.net/
 
 実機や他のX68エミュレータでは最大512x512にクリップされます。
 
+<img src='images/png_demo1.png'/>
+
 ---
 
 ### インストール方法
